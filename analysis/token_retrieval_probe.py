@@ -244,6 +244,35 @@ for route, table in (("token_high_union", "pairs_token_high_union"),
     metrics = out["routes"][route] if route == "token_high_union" else out["prerank"][route]
     metrics["candidate_count_quantiles"] = {k: counts[int(p*(len(counts)-1))]
         for k,p in (("median",.5),("p90",.9),("p99",.99),("max",1.0))}
+# A cheap rescue route independent of the selected rare query tokens. This is a
+# retrieval probe: legal-suffix stripping must not imply a confirmed match.
+legal = r"(^|[^a-z])(inc|llc|ltd|limited|private|pvt|corp|corporation|llp|co|company|sas|sarl|sa|eurl)([^a-z]|$)"
+core_expr = rf"regexp_replace(regexp_replace(regexp_replace(lower(business_name), '{legal}', ' ', 'g'), '{legal}', ' ', 'g'), '[^\p{{L}}\p{{M}}\p{{N}}]+', '', 'g')"
+compact_expr = r"regexp_replace(lower(business_name), '[^\p{L}\p{M}\p{N}]+', '', 'g')"
+out["rescue"] = {}
+for label,expr in (("compact",compact_expr),("core",core_expr)):
+    con.execute(f"""
+        CREATE TEMP TABLE pairs_rescue_{label} AS
+        WITH q AS (SELECT entity_id s1_id,country,{expr} norm_key FROM queries),
+             t AS (SELECT entity_id target_id,country,{expr} norm_key FROM ({targets}))
+        SELECT q.s1_id,t.target_id FROM q JOIN t USING (country,norm_key)
+        WHERE q.norm_key!=''
+    """)
+    con.execute(f"""
+        CREATE TEMP TABLE pairs_rescued_{label} AS
+        SELECT s1_id,target_id FROM ranked_high WHERE name_rank<=100 OR address_rank<=100
+        UNION SELECT s1_id,target_id FROM pairs_rescue_{label}
+    """)
+    hit_rows = set(con.execute(f"""
+        SELECT p.s1_id,p.target_id FROM pairs_rescued_{label} p
+        JOIN truth_edges e USING (s1_id,target_id)
+    """).fetchall())
+    n = con.execute(f"SELECT count(*) FROM pairs_rescued_{label}").fetchone()[0]
+    out["rescue"][label] = {"candidate_pairs":n,"true_pairs":len(hit_rows),
+        "edge_recall":len(hit_rows)/len(edges),
+        "complete_set_recall_nonempty":complete_set_recall(hit_rows),
+        "oracle_macro_f05_ceiling":oracle_macro_f05(hit_rows)}
+    print("rescue",label,out["rescue"][label],flush=True)
 case_rows = []
 for s1_id,target_id,country,s1_name,s1_addr,t_name,t_addr in truth_rows:
     pair = (s1_id,target_id)

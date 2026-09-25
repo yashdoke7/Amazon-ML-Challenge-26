@@ -44,4 +44,16 @@ The next retrieval probe should inspect actual missed positive groups and add co
 
 The first [miss audit](RETRIEVAL_MISS_AUDIT.md) found that rarest-token selection misses even some near-exact name pairs. The high union has 78.4% complete-set recall on non-singletons and an oracle macro-F0.5 ceiling of 0.9371 on the sampled S1. Separate name/address top-100 pruning has 73.7% complete-set recall and a 0.9297 oracle ceiling. These are candidate-only upper bounds, not achieved scores.
 
+## Exact-name rescue after pruning
+
+Independent exact normalized-name keys were unioned with the name-or-address top-100 set. Compact names remove punctuation and spaces. Core compact names also remove a first-pass list of Latin legal suffixes. The result remains a *candidate* set, not confirmed matches.
+
+| Candidate set | Pairs on 5k S1 | Gold-edge recall | Complete-set recall, non-singletons | Oracle macro F0.5 ceiling |
+| --- | ---: | ---: | ---: | ---: |
+| Name/address top-100 | 863,082 | 87.54% | 73.68% | 0.9297 |
+| Top-100 + compact exact name | 907,433 | 89.26% | 75.79% | 0.9465 |
+| Top-100 + core compact exact name | 1,027,502 | 90.91% | 78.18% | 0.9579 |
+
+The core-name rescue adds 583 true links and 164,420 total candidate pairs over the pruned set. It surpasses the original 9.37M-pair high token set's oracle ceiling at about 11% of its candidate count. This is strong evidence for complementary routes, although 1.03M pairs on 5k queries still extrapolates to roughly 356M test pairs and requires careful streaming and further pruning. Source and country slice results for this rescue still need measurement on a frozen validation set.
+
 Reproduce with `python analysis/normalization_benchmark.py`. The raw-pair result JSON is local-only and ignored by Git.

@@ -23,3 +23,5 @@ After separate name-or-address top-100 pruning, link recall is 87.5%, complete-s
 ## Next decision gate
 
 Test the rescue routes on a frozen S1 holdout with entity-grouped positives. Favor a route only if it increases complete-set recall or oracle F0.5 ceiling for a reasonable candidate cost, especially in India, cross-script, missing-address, and weak-field slices. Then train a precision-focused matcher and select thresholds on actual macro F0.5. For France and unseen languages, only claim robustness supported by stress tests; there are no French labels to establish equal quality.
+
+The first direct rescue test confirms the exact-name hypothesis: adding a crude core compact name key to the separate-field top-100 set raises gold-edge recall from 87.5% to 90.9%, complete-set recall from 73.7% to 78.2%, and the oracle macro-F0.5 ceiling from 0.9297 to 0.9579. It adds 164,420 candidate pairs on 5,000 queries. The core key is not a positive-match rule: generic business names still collide.
