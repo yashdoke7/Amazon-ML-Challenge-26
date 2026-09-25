@@ -8,7 +8,7 @@ Target: maximize private-leaderboard macro F0.5 on Source 1 → all matching Sou
 
 **Completed:** inspected the supplied challenge PDF and transcript; audited full dataset sizes and label integrity; sampled and reviewed true match groups, hard exact-key nonmatches, Indian script changes, French test text, corruption, shared addresses, and source-specific noise. Ran exact normalized and rare-token candidate-key probes against the full target universe and audited retrieval misses. See [DEEP_EDA.md](../analysis/DEEP_EDA.md), [RETRIEVAL_PROBES.md](../analysis/RETRIEVAL_PROBES.md), [RETRIEVAL_MISS_AUDIT.md](../analysis/RETRIEVAL_MISS_AUDIT.md), [INITIAL_STRATEGY.md](../analysis/INITIAL_STRATEGY.md), and [eda_patterns.png](../analysis/eda_patterns.png). The EDA scripts are reproducible; generated JSON with extracted rows is local-only and ignored by Git.
 
-**Not completed:** robust final candidate generator, validation split, matching model, full-test predictions, portal upload, final archive. Do not state a model score yet.
+**Not completed:** robust final candidate generator, matching model, full-test predictions, portal upload, final archive. A deterministic validation split and macro-F0.5 scorer are implemented, but no held-out model score exists yet.
 
 ## Essential measured facts
 
@@ -34,7 +34,7 @@ Target: maximize private-leaderboard macro F0.5 on Source 1 → all matching Sou
 
 ## Immediate next work
 
-Continue the candidate-generation benchmark **before** training the matcher. Freeze a deterministic S1 entity split with all their S2/S3 positives grouped by owner. Audit at least 20 missed true groups from RET-01/02 and test complementary rescue routes (alias/script, char n-grams, address components, exact core names) at explicit pair budgets. For each route report: positive-edge recall, fraction of S1 with every true link present, candidate pairs per S1, runtime, and recall for the risk slices above. Avoid leakage of held-out positives into training negatives. Record each experiment in [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md), then decide which routes merit full-scale indexing.
+Continue the candidate-generation benchmark **before** training the matcher. The deterministic S1 split and macro-F0.5 scorer are in [VALIDATION_PROTOCOL.md](VALIDATION_PROTOCOL.md); use them for further experiments. Test complementary rescue routes (alias/script, char n-grams, address components) at explicit pair budgets. For each route report: positive-edge recall, fraction of S1 with every true link present, candidate pairs per S1, runtime, and recall for the risk slices above. Avoid leakage of held-out positives into training negatives. Record each experiment in [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md), then decide which routes merit full-scale indexing.
 
 ## Repository and data paths
 
