@@ -250,6 +250,7 @@ legal = r"(^|[^a-z])(inc|llc|ltd|limited|private|pvt|corp|corporation|llp|co|com
 core_expr = rf"regexp_replace(regexp_replace(regexp_replace(lower(business_name), '{legal}', ' ', 'g'), '{legal}', ' ', 'g'), '[^\p{{L}}\p{{M}}\p{{N}}]+', '', 'g')"
 compact_expr = r"regexp_replace(lower(business_name), '[^\p{L}\p{M}\p{N}]+', '', 'g')"
 out["rescue"] = {}
+rescue_hits = {}
 for label,expr in (("compact",compact_expr),("core",core_expr)):
     con.execute(f"""
         CREATE TEMP TABLE pairs_rescue_{label} AS
@@ -267,12 +268,50 @@ for label,expr in (("compact",compact_expr),("core",core_expr)):
         SELECT p.s1_id,p.target_id FROM pairs_rescued_{label} p
         JOIN truth_edges e USING (s1_id,target_id)
     """).fetchall())
+    rescue_hits[label] = hit_rows
     n = con.execute(f"SELECT count(*) FROM pairs_rescued_{label}").fetchone()[0]
+    totals = {}
+    recovered = {}
+    for pair,categories in truth_slices.items():
+        for category in categories:
+            totals[category] = totals.get(category,0)+1
+            recovered[category] = recovered.get(category,0)+(pair in hit_rows)
     out["rescue"][label] = {"candidate_pairs":n,"true_pairs":len(hit_rows),
         "edge_recall":len(hit_rows)/len(edges),
         "complete_set_recall_nonempty":complete_set_recall(hit_rows),
-        "oracle_macro_f05_ceiling":oracle_macro_f05(hit_rows)}
+        "oracle_macro_f05_ceiling":oracle_macro_f05(hit_rows),
+        "slice_recall":{cat:{"n":totals[cat],"recall":recovered[cat]/totals[cat]}
+                        for cat in totals}}
     print("rescue",label,out["rescue"][label],flush=True)
+for label,condition in (("india_address_top300","q.country='India' AND r.address_rank<=300"),
+                        ("india_address_top500","q.country='India' AND r.address_rank<=500"),
+                        ("all_address_top300","r.address_rank<=300")):
+    con.execute(f"""
+        CREATE TEMP TABLE pairs_{label} AS
+        SELECT s1_id,target_id FROM pairs_rescued_core
+        UNION
+        SELECT r.s1_id,r.target_id FROM ranked_high r
+        JOIN queries q ON r.s1_id=q.entity_id
+        WHERE {condition}
+    """)
+    hits = set(con.execute(f"""
+        SELECT p.s1_id,p.target_id FROM pairs_{label} p
+        JOIN truth_edges e USING (s1_id,target_id)
+    """).fetchall())
+    n = con.execute(f"SELECT count(*) FROM pairs_{label}").fetchone()[0]
+    totals,recovered = {},{}
+    for pair,categories in truth_slices.items():
+        for category in categories:
+            totals[category] = totals.get(category,0)+1
+            recovered[category] = recovered.get(category,0)+(pair in hits)
+    out["rescue"][label] = {"candidate_pairs":n,"true_pairs":len(hits),
+        "edge_recall":len(hits)/len(edges),
+        "complete_set_recall_nonempty":complete_set_recall(hits),
+        "oracle_macro_f05_ceiling":oracle_macro_f05(hits),
+        "slice_recall":{cat:{"n":totals[cat],"recall":recovered[cat]/totals[cat]}
+                        for cat in totals}}
+    print("rescue",label,{k:v for k,v in out["rescue"][label].items()
+          if k!="slice_recall"},flush=True)
 case_rows = []
 for s1_id,target_id,country,s1_name,s1_addr,t_name,t_addr in truth_rows:
     pair = (s1_id,target_id)
@@ -287,5 +326,20 @@ for stage in ("token_high","top100_prune"):
     chosen.extend([row for row in case_rows if row["miss_stage"]==stage][:50])
 (OUT.parent/"token_retrieval_misses_results.json").write_text(
     json.dumps(chosen,ensure_ascii=False,indent=2),encoding="utf-8")
+core_misses = []
+core_rescued = []
+for s1_id,target_id,country,s1_name,s1_addr,t_name,t_addr in truth_rows:
+    pair = (s1_id,target_id)
+    if pair not in rescue_hits["core"] or pair in rescue_hits["core"] and pair not in ranked_hits:
+        item = {"s1_id":s1_id,"target_id":target_id,"country":country,
+                "s1_name":s1_name,"s1_address":s1_addr,"target_name":t_name,
+                "target_address":t_addr,"slices":truth_slices[pair]}
+        (core_misses if pair not in rescue_hits["core"] else core_rescued).append(item)
+RNG.shuffle(core_misses)
+RNG.shuffle(core_rescued)
+(OUT.parent/"core_rescue_audit_results.json").write_text(
+    json.dumps({"remaining_misses":core_misses[:60],
+                "incrementally_rescued":core_rescued[:40]},ensure_ascii=False,indent=2),
+    encoding="utf-8")
 OUT.write_text(json.dumps(out, indent=2), encoding="utf-8")
 print("wrote", OUT, "total seconds", out["total_seconds"])

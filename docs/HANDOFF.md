@@ -24,6 +24,7 @@ Target: maximize private-leaderboard macro F0.5 on Source 1 → all matching Sou
 - Jaro-Winkler joint top-100 pruning drops edge recall to 83.1%; independent name-or-address top-100 keeps 87.5% in 863k pairs. Maintain separate field quotas and investigate rescue routes.
 - High token union has 78.4% complete-set recall for non-singletons and oracle macro-F0.5 ceiling 0.9371 on sampled S1. Name/address top-100 has 73.7% complete-set recall and 0.9297 oracle ceiling. These are upper bounds, not model scores. Rarest-token selection misses some near-exact names.
 - Adding core compact exact-name candidates to name/address top-100 raises edge recall to 90.91%, complete-set recall to 78.18%, and oracle macro-F0.5 ceiling to 0.9579 at 1.03M candidate pairs on the 5k sample. The crude core key can collide and is never an automatic match decision.
+- Core rescue remains weak on cross-script links (59.8% recall) and both-weak links (3.4%). India address top500 improves these to 66.4%/10.8% but adds 542k pairs for only 117 true links; pursue more selective signals instead of global quota expansion.
 - Source 3 includes far more `DBA`/`aka`/`t/a` name variants than Source 2. France contains accented names and addresses; five-digit postal numbers are rare in the supplied addresses.
 
 ## Current decisions

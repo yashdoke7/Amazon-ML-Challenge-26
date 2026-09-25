@@ -56,4 +56,19 @@ Independent exact normalized-name keys were unioned with the name-or-address top
 
 The core-name rescue adds 583 true links and 164,420 total candidate pairs over the pruned set. It surpasses the original 9.37M-pair high token set's oracle ceiling at about 11% of its candidate count. This is strong evidence for complementary routes, although 1.03M pairs on 5k queries still extrapolates to roughly 356M test pairs and requires careful streaming and further pruning. Source and country slice results for this rescue still need measurement on a frozen validation set.
 
+### Hard slices and address-quota test
+
+The core-rescue candidate set retrieves 93.95% of US links but 86.37% of India links. Its blank-target-address recall is 76.32%, weak-address recall 67.82%, **cross-script recall 59.79%**, and **both-weak recall 3.41%**. These are exploratory-sample slice recalls, not held-out scores. The core name route helps missing addresses, but does not solve name-script changes.
+
+We tested adding deeper address-ranked candidates from the original high token pool:
+
+| Core rescue plus | Total pairs | Link recall | Cross-script recall | Both-weak recall | Oracle macro F0.5 ceiling |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| No extra address quota | 1,027,502 | 90.91% | 59.79% | 3.41% | 0.9579 |
+| India address top 300 | 1,310,254 | 91.34% | 64.14% | 6.82% | 0.9598 |
+| India address top 500 | 1,569,358 | 91.58% | 66.36% | 10.80% | 0.9609 |
+| All-country address top 300 | 1,820,406 | 91.52% | 64.14% | 6.82% | 0.9602 |
+
+The extra 541,856 pairs for India top 500 recover only 117 additional true links over core rescue. This is a poor global tradeoff. It supports improving the **retrieval/ranking signal** for cross-script and shortened-address pairs, not simply widening Jaro-Winkler address quotas. Targeted transliteration, address components, and character/token containment are the next hypotheses; measure each incremental pair cost.
+
 Reproduce with `python analysis/normalization_benchmark.py`. The raw-pair result JSON is local-only and ignored by Git.
