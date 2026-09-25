@@ -6,7 +6,7 @@ _Updated 25 September 2026. Read this first when resuming the project or switchi
 
 Target: maximize private-leaderboard macro F0.5 on Source 1 → all matching Source 2/3 records while meeting the complete submission and fair-play rules in [RULES.md](RULES.md). The intended competition outcome is top 50 for the Applied Scientist Intern interview, with top 10/final prizes as stretch goals.
 
-**Completed:** inspected the supplied challenge PDF and transcript; audited full dataset sizes and label integrity; sampled and reviewed true match groups, hard exact-key nonmatches, Indian script changes, French test text, corruption, shared addresses, and source-specific noise. See [DEEP_EDA.md](../analysis/DEEP_EDA.md), [INITIAL_STRATEGY.md](../analysis/INITIAL_STRATEGY.md), and [eda_patterns.png](../analysis/eda_patterns.png). The EDA scripts are reproducible; generated JSON with extracted rows is local-only and ignored by Git.
+**Completed:** inspected the supplied challenge PDF and transcript; audited full dataset sizes and label integrity; sampled and reviewed true match groups, hard exact-key nonmatches, Indian script changes, French test text, corruption, shared addresses, and source-specific noise. Ran exact normalized candidate-key probes against the full target universe. See [DEEP_EDA.md](../analysis/DEEP_EDA.md), [RETRIEVAL_PROBES.md](../analysis/RETRIEVAL_PROBES.md), [INITIAL_STRATEGY.md](../analysis/INITIAL_STRATEGY.md), and [eda_patterns.png](../analysis/eda_patterns.png). The EDA scripts are reproducible; generated JSON with extracted rows is local-only and ignored by Git.
 
 **Not completed:** candidate-recall benchmark, validation split, matching model, full-test predictions, portal upload, final archive. Do not state a model score yet.
 
@@ -17,6 +17,7 @@ Target: maximize private-leaderboard macro F0.5 on Source 1 → all matching Sou
 - Full label audit: every target exists, every match stays within country, and each target is owned by only one S1.
 - 30k random S1 sample (103,685 true links): 11.2% of positives have weak name similarity (<50), 7.9% weak address similarity, 0.94% both; 4.4% target addresses are blank; 7.1% change name script. For India/S2, 22.7% change name script.
 - 5k S1 collision sample: case-insensitive exact-name retrieval finds 30,495 candidates, only 1,908 labeled true; exact-address retrieval finds 1,569 candidates, 1,255 labeled true. Their union covers only 17.6% of the sample's 17,312 true links. Generic names can create hundreds of candidates. Exact addresses can host multiple businesses.
+- On the same 5k sample, Unicode/punctuation normalized name/address union covers 29.5% of links. A crude legal-suffix-reduced name plus normalized address covers 47.6%, but yields 183,461 candidate pairs and a maximum block of 1,331 targets. Fuzzy retrieval is still required.
 - Source 3 includes far more `DBA`/`aka`/`t/a` name variants than Source 2. France contains accented names and addresses; five-digit postal numbers are rare in the supplied addresses.
 
 ## Current decisions
@@ -29,7 +30,7 @@ Target: maximize private-leaderboard macro F0.5 on Source 1 → all matching Sou
 
 ## Immediate next work
 
-Build a held-out candidate-generation benchmark **before** training the matcher. Freeze a deterministic S1 entity split with all their S2/S3 positives grouped by owner. For each retrieval route report: positive-edge recall, fraction of S1 with every true link present, candidate pairs per S1, runtime, and recall for the risk slices above. Avoid leakage of held-out positives into training negatives. Record each experiment in [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md), then decide which routes merit full-scale indexing.
+Continue the candidate-generation benchmark **before** training the matcher. Freeze a deterministic S1 entity split with all their S2/S3 positives grouped by owner. Next test token/character retrieval with explicit block-volume estimates. For each retrieval route report: positive-edge recall, fraction of S1 with every true link present, candidate pairs per S1, runtime, and recall for the risk slices above. Avoid leakage of held-out positives into training negatives. Record each experiment in [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md), then decide which routes merit full-scale indexing.
 
 ## Repository and data paths
 
