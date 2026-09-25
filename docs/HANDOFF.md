@@ -2,6 +2,8 @@
 
 _Updated 25 September 2026. Read this first when resuming the project or switching assistants._
 
+For a single narrative of findings, next targets, and reasoning, start with [START_HERE.md](START_HERE.md). This file remains a compact checkpoint.
+
 ## Objective and status
 
 Target: maximize private-leaderboard macro F0.5 on Source 1 → all matching Source 2/3 records while meeting the complete submission and fair-play rules in [RULES.md](RULES.md). The intended competition outcome is top 50 for the Applied Scientist Intern interview, with top 10/final prizes as stretch goals.

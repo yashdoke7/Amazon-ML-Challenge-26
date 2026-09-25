@@ -4,7 +4,7 @@ Private team workspace for analysis and a reproducible submission. Source 1 is t
 
 ## Current stage
 
-Row-level exploratory analysis is complete. Candidate retrieval, matching, full-test inference, and leaderboard submission are **not yet complete**. Start with [the handoff](docs/HANDOFF.md), [the detailed EDA](analysis/DEEP_EDA.md), and [the experiment log](docs/EXPERIMENT_LOG.md). These distinguish verified measurements from proposed approaches.
+Row-level exploratory analysis and several candidate-retrieval probes are complete. A deterministic validation split exists; matching, full-test inference, and leaderboard submission are **not yet complete**. Start with [the research handoff](docs/START_HERE.md). It records measured findings, open risks, next experiments, and why they come next. Supporting details are in [the detailed EDA](analysis/DEEP_EDA.md), [the retrieval probes](analysis/RETRIEVAL_PROBES.md), and [the experiment log](docs/EXPERIMENT_LOG.md).
 
 ## Layout
 
