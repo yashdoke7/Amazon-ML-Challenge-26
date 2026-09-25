@@ -38,6 +38,14 @@ High-token recall was US 91.9%, India 85.4%, cross-script 70.5%, blank target ad
 
 Follow-up slice analysis found the core rescue at US 94.0%, India 86.4%, blank target address 76.3%, cross-script **59.8%**, and both-weak **3.4%**. Enlarging the India address quota to top 500 raises cross-script recall to 66.4% but adds **542,000** pairs for only **117** additional true links. This is an inefficient global fix. The next language/address tests should improve the similarity signal or targeted blocking, rather than just increase Jaro-Winkler quotas. These still need confirmation on the frozen development split.
 
+### Development-partition confirmation
+
+The core-rescue route was rerun over all 22,133 deterministic development S1 rows against all 10.32 million training targets (76,472 labeled links; 93 seconds on the local machine). It produced 4,518,733 candidate pairs, 69,730 true links, 91.18% edge recall, 78.97% non-singleton complete-set recall, and a 0.9617 oracle macro-F0.5 ceiling. Candidate counts were median 195, p90 253, p99 724, maximum 1,527. Slice recall was US 94.19%, India 86.72%, cross-script 62.53%, missing target address 75.21%, weak address 66.46%, and both weak 6.29%.
+
+Adding the India address top-500 quota on this same development set increased the set to 6,921,250 pairs, 91.71% edge recall, and a 0.9638 oracle ceiling. It recovered 404 additional true links for 2.40 million additional pairs. The route remains a useful recall reference, but the quota expansion is rejected as the default because its cost is disproportionate. The core rescue is now the **candidate baseline** for any future matcher; remaining work is targeted rescue and precision, not another generic widening pass.
+
+The first focused rescue, a normalized Source 1 name to target domain-stem block, was tested against the full development baseline. It added 19,807 candidate pairs and 93 true links, raising edge recall from 91.18% to 91.31% and the oracle ceiling from 0.9617 to 0.9624. Keep it as an optional low-cost channel; it is not the main multilingual solution.
+
 Details and reproducible scripts: [DEEP_EDA.md](../analysis/DEEP_EDA.md), [RETRIEVAL_PROBES.md](../analysis/RETRIEVAL_PROBES.md), [RETRIEVAL_MISS_AUDIT.md](../analysis/RETRIEVAL_MISS_AUDIT.md), and [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md). Raw record extracts and aggregate JSON outputs stay local and ignored by Git.
 
 ## Why candidates are missed

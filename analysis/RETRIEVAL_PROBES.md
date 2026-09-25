@@ -56,6 +56,10 @@ Independent exact normalized-name keys were unioned with the name-or-address top
 
 The core-name rescue adds 583 true links and 164,420 total candidate pairs over the pruned set. It surpasses the original 9.37M-pair high token set's oracle ceiling at about 11% of its candidate count. This is strong evidence for complementary routes, although 1.03M pairs on 5k queries still extrapolates to roughly 356M test pairs and requires careful streaming and further pruning. Source and country slice results for this rescue still need measurement on a frozen validation set.
 
+The core rescue was subsequently confirmed on all 22,133 development S1 rows: 4,518,733 pairs, 69,730 true links, 91.18% edge recall, 78.97% complete-set recall, and 0.9617 oracle macro F0.5 ceiling. Candidate-count quantiles were median 195, p90 253, p99 724, maximum 1,527. India address top-500 added 2,402,517 pairs and 404 true links, reaching 91.71% and 0.9638; this is not the default due to cost.
+
+A normalized Source 1 name to target domain-stem block unioned with the core baseline on all development S1 added 19,807 candidates and 93 true links, reaching 91.31% edge recall and a 0.9624 oracle ceiling. It is a modest low-cost rescue, not the main multilingual solution.
+
 ### Hard slices and address-quota test
 
 The core-rescue candidate set retrieves 93.95% of US links but 86.37% of India links. Its blank-target-address recall is 76.32%, weak-address recall 67.82%, **cross-script recall 59.79%**, and **both-weak recall 3.41%**. These are exploratory-sample slice recalls, not held-out scores. The core name route helps missing addresses, but does not solve name-script changes.

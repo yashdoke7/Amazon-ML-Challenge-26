@@ -329,6 +329,30 @@ for label,condition in (("india_address_top300","q.country='India' AND r.address
                         for cat in totals}}
     print("rescue",label,{k:v for k,v in out["rescue"][label].items()
           if k!="slice_recall"},flush=True)
+domain_expr = r"regexp_extract(lower(business_name), '([a-z0-9-]+)[.](com|in|fr|org|net|co|io)(?:[^a-z]|$)', 1)"
+con.execute(f"""
+    CREATE TEMP TABLE pairs_rescue_domain AS
+    WITH q AS (SELECT entity_id s1_id,country,regexp_replace(lower(business_name),'[^\\p{{L}}\\p{{M}}\\p{{N}}]+','','g') norm_key FROM queries),
+         t AS (SELECT entity_id target_id,country,{domain_expr} norm_key FROM ({targets}))
+    SELECT q.s1_id,t.target_id FROM q JOIN t USING (country,norm_key)
+    WHERE q.norm_key!='' AND t.norm_key!=''
+""")
+con.execute("""
+    CREATE TEMP TABLE pairs_rescued_domain AS
+    SELECT * FROM pairs_rescued_core UNION SELECT * FROM pairs_rescue_domain
+""")
+domain_hits = set(con.execute("""
+    SELECT p.s1_id,p.target_id FROM pairs_rescued_domain p
+    JOIN truth_edges e USING (s1_id,target_id)
+""").fetchall())
+domain_n = con.execute("SELECT count(*) FROM pairs_rescued_domain").fetchone()[0]
+out["rescue"]["domain"] = {"candidate_pairs":domain_n,"true_pairs":len(domain_hits),
+    "incremental_candidate_pairs":domain_n-out["rescue"]["core"]["candidate_pairs"],
+    "incremental_true_links":len(domain_hits)-out["rescue"]["core"]["true_pairs"],
+    "edge_recall":len(domain_hits)/len(edges),
+    "complete_set_recall_nonempty":complete_set_recall(domain_hits),
+    "oracle_macro_f05_ceiling":oracle_macro_f05(domain_hits)}
+print("rescue domain",out["rescue"]["domain"],flush=True)
 case_rows = []
 for s1_id,target_id,country,s1_name,s1_addr,t_name,t_addr in truth_rows:
     pair = (s1_id,target_id)
