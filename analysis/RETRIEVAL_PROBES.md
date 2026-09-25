@@ -20,6 +20,26 @@ The 5,000 queries have 17,312 labeled positive links. Each route requires equal 
 
 These numbers expose the next bottleneck: good normalization improves candidate recall substantially, but even core-name plus exact-address retrieval misses **52.4%** of positive links. Fuzzy retrieval is mandatory. Legal-suffix removal recovers 3,137 additional true links over the basic name/address union but brings about 130,000 additional candidate pairs. Its largest sampled query block contains **1,331** targets. It is viable only with scoring, selective block handling, and measured resource limits. The domain route adds 496 true links to the basic union, but many more wrong candidates; it is a rescue channel, not an acceptance rule.
 
-The next probe is token/character-based retrieval with a candidate-volume budget, followed by full held-out recall by risk slice. Retrieval must work across the noisy name and address views; no exact-key rule can be the final blocker.
+## Rare-token retrieval probe
+
+The same 5,000 queries and all 10.32 million training targets were used. For each query field, tokens of at least four Unicode letters/numbers were ordered by target document frequency. A route chose up to 1, 2, or 3 rarest tokens with document-frequency caps of 500, 1,000, or 3,000. Name and address routes were tested independently and combined by union. This is still a **retrieval ceiling**, not matcher precision or F0.5.
+
+| Route | Candidate pairs | True links retrieved | Gold-edge recall |
+| --- | ---: | ---: | ---: |
+| Rare name token, cap 500, top 1 | 250,619 | 5,597 | 32.3% |
+| Rare address token, cap 500, top 1 | 419,895 | 9,151 | 52.9% |
+| Low-volume name/address union | 666,797 | 11,856 | 68.5% |
+| Name top 2, cap 1,000 | 546,475 | 6,348 | 36.7% |
+| Address top 2, cap 1,000 | 1,582,849 | 11,453 | 66.2% |
+| Mid-volume union | 2,123,362 | 13,660 | 78.9% |
+| Name top 3, cap 3,000 | 3,295,517 | 8,402 | 48.5% |
+| Address top 3, cap 3,000 | 6,082,451 | 13,733 | 79.3% |
+| High-volume union | 9,365,116 | 15,457 | 89.3% |
+
+The high-volume union averages 1,873 candidates per query and would imply roughly 3.24 billion pairs for the full 1.73 million test queries if this sample were representative. That is too large for an expensive matcher. Its recall is US 91.9%, India 85.4%, cross-script names 70.5%, missing target address 61.0%, weak address 56.8%, and both weak 19.9%. These slices are the immediate retrieval gaps. Address tokens are substantially more productive than name tokens, especially when names change script.
+
+As a first cheap pruning test, DuckDB Jaro-Winkler similarities were calculated for name and address on the high-volume union. A joint score of `0.65 * max(name, address) + 0.35 * min(name, address)` retained 79.8% of gold links in top 20 and 83.1% in top 100. It nearly eliminated the missing-address slice (5.0% recall at top 100). Independently reserving top 100 by **name OR address** retained 87.5% of gold links in 863,082 pairs, including 58.0% of the missing-address slice. Separate field quotas are the safer current pruning design; Jaro-Winkler is only a feasibility score and must not become an acceptance rule.
+
+The next retrieval probe should inspect actual missed positive groups and add complementary routes for alias/script changes and weak addresses, then measure whether they rescue true links at a workable pair budget. Before a final candidate design, report complete-set recall per S1, candidate-count tails, and a frozen validation split. Reproduce this probe with `python analysis/token_retrieval_probe.py`; the aggregate result JSON and raw-record extracts are local-only and ignored by Git.
 
 Reproduce with `python analysis/normalization_benchmark.py`. The raw-pair result JSON is local-only and ignored by Git.
