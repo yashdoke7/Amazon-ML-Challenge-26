@@ -1,0 +1,33 @@
+# Competition data and local downloads are not source code.
+6ab10eb3b23ba_student_resource/
+tmp/
+
+# Generated predictions and submission bundles.
+output/*.tsv
+output/*.zip
+*.parquet
+*.feather
+*.arrow
+*.pkl
+*.joblib
+*.bin
+*.pt
+*.safetensors
+*_submission.zip
+
+# Exploratory raw-record extracts can be regenerated from the supplied TSVs.
+analysis/*_results.json
+
+# Environments, caches, credentials.
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.duckdb/
+*.duckdb
+*.duckdb.wal
+.ipynb_checkpoints/
