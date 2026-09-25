@@ -5,6 +5,7 @@ those queries. This is a feasibility/retrieval test, not the final blocker.
 """
 import csv
 import json
+import os
 import random
 import sys
 import time
@@ -18,20 +19,30 @@ from rapidfuzz import fuzz
 
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(__file__).resolve().parents[1] / "6ab10eb3b23ba_student_resource" / "student_resource" / "dataset" / "train"
-OUT = Path(__file__).resolve().parent / "token_retrieval_results.json"
+QUERY_SPLIT = os.environ.get("QUERY_SPLIT", "all")
+if QUERY_SPLIT not in ("all", "development"):
+    raise ValueError("QUERY_SPLIT must be 'all' or 'development'")
+if QUERY_SPLIT == "development":
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "code" / "business_entity_resolution" / "src"))
+    from validation import entity_split
+OUT = Path(__file__).resolve().parent / ("token_retrieval_dev_results.json" if QUERY_SPLIT=="development" else "token_retrieval_results.json")
 RNG = random.Random(20260925)
-N = 5000
+N = int(os.environ.get("QUERY_COUNT", "5000"))
 sample = []
+eligible_seen = 0
 with (ROOT / "train_ground_truth.tsv").open(encoding="utf-8", newline="") as f:
-    for i, row in enumerate(csv.DictReader(f, delimiter="\t")):
+    for row in csv.DictReader(f, delimiter="\t"):
+        if QUERY_SPLIT == "development" and entity_split(row["source1_entity_id"]) != "development":
+            continue
         ids = row["matched_entity_ids"].split(",") if row["matched_entity_ids"] else []
         item = (row["source1_entity_id"], ids)
-        if i < N:
+        if eligible_seen < N:
             sample.append(item)
         else:
-            j = RNG.randrange(i + 1)
+            j = RNG.randrange(eligible_seen + 1)
             if j < N:
                 sample[j] = item
+        eligible_seen += 1
 truth = dict(sample)
 queries = []
 with (ROOT / "train_source1.tsv").open(encoding="utf-8", newline="") as f:
@@ -48,7 +59,8 @@ targets = " UNION ALL ".join(
     f"SELECT entity_id, business_name, business_address, country FROM read_csv('{(ROOT / f'train_source{s}.tsv').as_posix()}', delim='\t', header=true)"
     for s in (2, 3)
 )
-out = {"sample_s1": len(queries), "sample_true_edges": len(edges), "routes": {}}
+out = {"sample_s1": len(queries), "sample_true_edges": len(edges),
+       "query_split": QUERY_SPLIT, "eligible_queries": eligible_seen, "routes": {}}
 start_all = time.perf_counter()
 for field in ("business_name", "business_address"):
     label = "name" if field == "business_name" else "address"
@@ -282,6 +294,11 @@ for label,expr in (("compact",compact_expr),("core",core_expr)):
         "oracle_macro_f05_ceiling":oracle_macro_f05(hit_rows),
         "slice_recall":{cat:{"n":totals[cat],"recall":recovered[cat]/totals[cat]}
                         for cat in totals}}
+    counts = [r[0] for r in con.execute(f"SELECT count(*) FROM pairs_rescued_{label} GROUP BY s1_id").fetchall()]
+    counts += [0]*(len(sample)-len(counts))
+    counts.sort()
+    out["rescue"][label]["candidate_count_quantiles"] = {k:counts[int(p*(len(counts)-1))]
+        for k,p in (("median",.5),("p90",.9),("p99",.99),("max",1.0))}
     print("rescue",label,out["rescue"][label],flush=True)
 for label,condition in (("india_address_top300","q.country='India' AND r.address_rank<=300"),
                         ("india_address_top500","q.country='India' AND r.address_rank<=500"),
@@ -324,7 +341,7 @@ RNG.shuffle(case_rows)
 chosen = []
 for stage in ("token_high","top100_prune"):
     chosen.extend([row for row in case_rows if row["miss_stage"]==stage][:50])
-(OUT.parent/"token_retrieval_misses_results.json").write_text(
+(OUT.parent/("token_retrieval_dev_misses_results.json" if QUERY_SPLIT=="development" else "token_retrieval_misses_results.json")).write_text(
     json.dumps(chosen,ensure_ascii=False,indent=2),encoding="utf-8")
 core_misses = []
 core_rescued = []
@@ -337,7 +354,7 @@ for s1_id,target_id,country,s1_name,s1_addr,t_name,t_addr in truth_rows:
         (core_misses if pair not in rescue_hits["core"] else core_rescued).append(item)
 RNG.shuffle(core_misses)
 RNG.shuffle(core_rescued)
-(OUT.parent/"core_rescue_audit_results.json").write_text(
+(OUT.parent/("core_rescue_dev_audit_results.json" if QUERY_SPLIT=="development" else "core_rescue_audit_results.json")).write_text(
     json.dumps({"remaining_misses":core_misses[:60],
                 "incrementally_rescued":core_rescued[:40]},ensure_ascii=False,indent=2),
     encoding="utf-8")

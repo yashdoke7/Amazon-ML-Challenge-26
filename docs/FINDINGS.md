@@ -1,6 +1,6 @@
-# Research handoff and next decisions
+# Findings and decisions
 
-_Updated 25 September 2026, about 23:30 IST. This is the single starting point if the current conversation or model is interrupted. The private repository is `https://github.com/yashdoke7/Amazon-ML-Challenge-26`._
+_Updated 25 September 2026. This is the canonical record of what we found, what each experiment measured, and why decisions changed. For the ordered work queue, read [NEXT.md](NEXT.md). The private repository is `https://github.com/yashdoke7/Amazon-ML-Challenge-26`._
 
 ## What we are trying to achieve
 
@@ -50,22 +50,9 @@ Fifty-six original missed groups were manually inspected from a reproducible loc
 4. Domain-style concatenations, alias/trade names, word-order changes, and character corruptions each create failures that a single exact or full-string similarity measure misses.
 5. Shared buildings and almost identical nonmatches mean stronger recall routes also add realistic false matches. Final decisions must be learned or calibrated, with specific hard-negative checks.
 
-## Next research targets, in order
-
-| Priority | Experiment and reason | Required decision evidence |
-| --- | --- | --- |
-| 1 | **Evaluate the current core-rescue candidate route on the frozen development split** from [VALIDATION_PROTOCOL.md](VALIDATION_PROTOCOL.md). The 5k exploratory sample is promising but too small for final selection. | Link recall, complete-set recall, oracle macro F0.5, median/p90/p99/max pairs per S1, runtime, memory, US/India and S2/S3 slices, script-change and blank-address slices. |
-| 2 | **Analyze incremental missed true links after the core rescue**, not just misses from older routes. Categorize a seeded sample of original record groups. This prevents optimizing already solved cases. | Counts by script change, blank/shortened address, alias/domain, number corruption, source, and both-weak fields; representative local examples. |
-| 3 | **Test narrow rescue channels independently:** accent-folded/compact domain and alias views; address components/number-locality combinations; character n-grams; optional local transliteration. These target distinct remaining gaps. | Incremental true links, incremental candidate pairs, complete-set and oracle-ceiling gains, false-collision tails for each channel. Keep the raw fields alongside every derived view. |
-| 4 | **Stress-test generalization.** With no French labels, check France candidate volume and text behavior without claiming accuracy. Hold out Indian scripts or transform Latin accents to see whether a route depends on language-specific shortcuts. | Coverage/cost and qualitative failures by script/country; no unmeasured performance claim. |
-| 5 | **Only then train a first matching baseline.** Candidate recall must be high enough first. Use source-aware name/address similarities, aliases, numbers, missingness, and hard negatives; respect the fixed split and exclude held-out-owned targets from training negatives. | Actual held-out macro F0.5, singleton accuracy, source/country/noise slices, calibration/threshold curve, runtime. Clearly separate it from oracle ceilings. |
-| 6 | **Scale and package.** Stream full test retrieval/scoring, inspect France and large blocks, generate both required TSVs, run the supplied validator, and prepare the methodology/code archive. | Exact row/ID/candidate-subset checks, reproducible commands, pinned requirements, licensing record, full runtime, portal upload result. |
-
-Route additions should be accepted for **measured incremental benefit**, not because they sound multilingual or sophisticated. In particular, do not spend most of the remaining time on a huge model before confirming that the desired links reach it. At the same time, do not mistake a high oracle ceiling for a score: the precision problem remains open.
-
 ## Non-negotiable rules and practical handoff
 
 - No external business-identity lookup, registry, map/geocoding API, external data augmentation, or remote inference on supplied record text. General method research is separate. Any final pretrained model weights must meet the MIT/Apache 2.0 and at-most-8B-parameter condition; verify the actual weights license.
 - Submission needs one result row and one final-candidate row for **every** test S1, including singletons. Final matches must be a subset of the listed last-stage candidates. The final ZIP also needs runnable code, pinned dependencies, a README, and the filled methodology template. See [RULES.md](RULES.md) for exact names and validator commands.
 - The local data path is `6ab10eb3b23ba_student_resource/student_resource/dataset/`; it is ignored by Git. `analysis/*_results.json`, Parquet, model files, and outputs are ignored too. Commit scripts, aggregate findings, and concise documentation; never commit raw records, credentials, or supplied TSVs.
-- The current committed state is on `main`; use `git status` and `git log -1 --oneline` before continuing. The root [README](../README.md) and [HANDOFF.md](HANDOFF.md) point to supporting artifacts. The user will contribute observations as they arise; incorporate them into hypotheses and test them against the frozen split.
+- The current committed state is on `main`; use `git status` and `git log -1 --oneline` before continuing. The root [README](../README.md) points to these two canonical documents. The user will contribute observations as they arise; incorporate them into hypotheses and test them against the frozen split.
