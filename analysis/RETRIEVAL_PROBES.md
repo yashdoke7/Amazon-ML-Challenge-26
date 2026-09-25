@@ -42,4 +42,6 @@ As a first cheap pruning test, DuckDB Jaro-Winkler similarities were calculated 
 
 The next retrieval probe should inspect actual missed positive groups and add complementary routes for alias/script changes and weak addresses, then measure whether they rescue true links at a workable pair budget. Before a final candidate design, report complete-set recall per S1, candidate-count tails, and a frozen validation split. Reproduce this probe with `python analysis/token_retrieval_probe.py`; the aggregate result JSON and raw-record extracts are local-only and ignored by Git.
 
+The first [miss audit](RETRIEVAL_MISS_AUDIT.md) found that rarest-token selection misses even some near-exact name pairs. The high union has 78.4% complete-set recall on non-singletons and an oracle macro-F0.5 ceiling of 0.9371 on the sampled S1. Separate name/address top-100 pruning has 73.7% complete-set recall and a 0.9297 oracle ceiling. These are candidate-only upper bounds, not achieved scores.
+
 Reproduce with `python analysis/normalization_benchmark.py`. The raw-pair result JSON is local-only and ignored by Git.

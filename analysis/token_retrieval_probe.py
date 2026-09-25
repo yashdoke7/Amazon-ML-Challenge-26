@@ -209,5 +209,54 @@ for k in (20,50,100):
        "edge_recall": len(hits)/len(edges),"slice_recall": {cat: recovered[cat]/totals[cat] for cat in totals}}
     print("name_or_address_top",k,"candidates",n_pairs,"true",len(hits),"recall",round(len(hits)/len(edges),4),flush=True)
 out["total_seconds"] = round(time.perf_counter()-start_all,1)
+high_hits = set(con.execute("""
+    SELECT p.s1_id,p.target_id FROM pairs_token_high_union p
+    JOIN truth_edges e USING (s1_id,target_id)
+""").fetchall())
+ranked_hits = set(con.execute("""
+    SELECT r.s1_id,r.target_id FROM ranked_high r
+    JOIN truth_edges e USING (s1_id,target_id)
+    WHERE r.name_rank<=100 OR r.address_rank<=100
+""").fetchall())
+def complete_set_recall(hits):
+    nonempty = [(s1, ids) for s1, ids in sample if ids]
+    return sum(all((s1, target) in hits for target in ids) for s1, ids in nonempty)/len(nonempty)
+def oracle_macro_f05(hits):
+    scores = []
+    for s1, ids in sample:
+        if not ids:
+            scores.append(1.0)
+            continue
+        tp = sum((s1, target) in hits for target in ids)
+        fn = len(ids)-tp
+        scores.append(1.25*tp/(1.25*tp+0.25*fn) if tp else 0.0)
+    return sum(scores)/len(scores)
+out["routes"]["token_high_union"]["complete_set_recall_nonempty"] = complete_set_recall(high_hits)
+out["prerank"]["name_or_address_top100"]["complete_set_recall_nonempty"] = complete_set_recall(ranked_hits)
+out["routes"]["token_high_union"]["oracle_macro_f05_ceiling"] = oracle_macro_f05(high_hits)
+out["prerank"]["name_or_address_top100"]["oracle_macro_f05_ceiling"] = oracle_macro_f05(ranked_hits)
+for route, table in (("token_high_union", "pairs_token_high_union"),
+                     ("name_or_address_top100", "ranked_high")):
+    where = "WHERE name_rank<=100 OR address_rank<=100" if route != "token_high_union" else ""
+    counts = [r[0] for r in con.execute(f"SELECT count(*) FROM {table} {where} GROUP BY s1_id").fetchall()]
+    counts += [0]*(len(sample)-len(counts))
+    counts.sort()
+    metrics = out["routes"][route] if route == "token_high_union" else out["prerank"][route]
+    metrics["candidate_count_quantiles"] = {k: counts[int(p*(len(counts)-1))]
+        for k,p in (("median",.5),("p90",.9),("p99",.99),("max",1.0))}
+case_rows = []
+for s1_id,target_id,country,s1_name,s1_addr,t_name,t_addr in truth_rows:
+    pair = (s1_id,target_id)
+    if pair not in high_hits or pair not in ranked_hits:
+        case_rows.append({"s1_id":s1_id,"target_id":target_id,"country":country,
+            "s1_name":s1_name,"s1_address":s1_addr,"target_name":t_name,
+            "target_address":t_addr,"slices":truth_slices[pair],
+            "miss_stage":"token_high" if pair not in high_hits else "top100_prune"})
+RNG.shuffle(case_rows)
+chosen = []
+for stage in ("token_high","top100_prune"):
+    chosen.extend([row for row in case_rows if row["miss_stage"]==stage][:50])
+(OUT.parent/"token_retrieval_misses_results.json").write_text(
+    json.dumps(chosen,ensure_ascii=False,indent=2),encoding="utf-8")
 OUT.write_text(json.dumps(out, indent=2), encoding="utf-8")
 print("wrote", OUT, "total seconds", out["total_seconds"])

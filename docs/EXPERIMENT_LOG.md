@@ -10,7 +10,7 @@ Record the exact split, data universe, seed, candidate budget, runtime, coverage
 | RET-00 | Complete | Seeded 5k S1 sample, full target universe, normalized exact-key probes | Basic name/address union 29.5% edge recall; crude legal-suffix core name/address 47.6% with 183,461 candidates | Fuzzy retrieval is necessary; core key needs volume limits. [Details](../analysis/RETRIEVAL_PROBES.md) |
 | RET-01 | Complete, feasibility probe | Same seeded 5k S1, full target universe; rare name/address token routes | Low/mid/high unions: 68.5%/78.9%/89.3% edge recall at 0.67M/2.12M/9.37M pairs; high union weak on India, cross-script, missing/weak addresses | Improve recall and reduce pairs before full-scale indexing. [Details](../analysis/RETRIEVAL_PROBES.md) |
 | RET-02 | Complete, feasibility probe | Jaro-Winkler pre-ranking on RET-01 high union | Joint top100 83.1%; independent name/address top100 union 87.5% at 863k pairs | Keep separate field quotas; inspect missed true groups and try complementary rescue routes |
-| RET-03 | Next | Frozen held-out S1 validation, retrieval miss audit, source-aware rescue routes | Pending | Measure complete-set recall, cost, and subgroup coverage |
+| RET-03 | Audit complete; rescue next | 100 sampled retrieval misses, 56 inspected as original record groups; candidate ceiling measured | High union: 78.4% complete-set recall, 0.9371 oracle macro F0.5; name/address top100: 73.7%, 0.9297 | Rarest-token choice, script changes, shortened/blank addresses, aliases and reordered text need complementary routes. [Audit](../analysis/RETRIEVAL_MISS_AUDIT.md) |
 
 ## Required metrics for RET-01
 
