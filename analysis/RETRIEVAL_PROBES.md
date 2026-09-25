@@ -60,6 +60,8 @@ The core rescue was subsequently confirmed on all 22,133 development S1 rows: 4,
 
 A normalized Source 1 name to target domain-stem block unioned with the core baseline on all development S1 added 19,807 candidates and 93 true links, reaching 91.31% edge recall and a 0.9624 oracle ceiling. It is a modest low-cost rescue, not the main multilingual solution.
 
+On a 5,000-row deterministic development subset, normalized address-number blocks were tested as a targeted rescue. `df<=500, top1` added 188,352 candidates and 46 true links; `df<=1,000, top2` added 565,025 candidates and 88 true links. The latter reached 91.84% edge recall and a 0.9655 oracle ceiling in that subset. These are exploratory figures; run the selected route on all development and inspect collisions before using it.
+
 ### Hard slices and address-quota test
 
 The core-rescue candidate set retrieves 93.95% of US links but 86.37% of India links. Its blank-target-address recall is 76.32%, weak-address recall 67.82%, **cross-script recall 59.79%**, and **both-weak recall 3.41%**. These are exploratory-sample slice recalls, not held-out scores. The core name route helps missing addresses, but does not solve name-script changes.

@@ -46,6 +46,8 @@ Adding the India address top-500 quota on this same development set increased th
 
 The first focused rescue, a normalized Source 1 name to target domain-stem block, was tested against the full development baseline. It added 19,807 candidate pairs and 93 true links, raising edge recall from 91.18% to 91.31% and the oracle ceiling from 0.9617 to 0.9624. Keep it as an optional low-cost channel; it is not the main multilingual solution.
 
+An address-number rescue was then tested on a deterministic 5,000-row development subset against the full target universe. Normalized numeric tokens were frequency-capped to avoid common-number explosions. The best tested setting (`df<=1,000`, two selected number tokens) added 565,025 candidates and 88 true links over core rescue, raising exploratory edge recall from 91.34% to 91.84% and the oracle ceiling from 0.9636 to 0.9655. A tighter `df<=500`, one-token setting added 188,352 candidates and 46 true links. This is a plausible selective rescue for shortened/corrupted addresses, but its full-development value and collision profile still need confirmation before adoption.
+
 Details and reproducible scripts: [DEEP_EDA.md](../analysis/DEEP_EDA.md), [RETRIEVAL_PROBES.md](../analysis/RETRIEVAL_PROBES.md), [RETRIEVAL_MISS_AUDIT.md](../analysis/RETRIEVAL_MISS_AUDIT.md), and [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md). Raw record extracts and aggregate JSON outputs stay local and ignored by Git.
 
 ## Why candidates are missed

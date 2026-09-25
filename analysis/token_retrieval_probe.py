@@ -353,6 +353,49 @@ out["rescue"]["domain"] = {"candidate_pairs":domain_n,"true_pairs":len(domain_hi
     "complete_set_recall_nonempty":complete_set_recall(domain_hits),
     "oracle_macro_f05_ceiling":oracle_macro_f05(domain_hits)}
 print("rescue domain",out["rescue"]["domain"],flush=True)
+# Address-number blocking is a targeted rescue for script changes and shortened
+# addresses. It is deliberately frequency-capped because street numbers collide.
+con.execute("""
+    CREATE TEMP TABLE q_num_tokens AS
+    SELECT DISTINCT entity_id s1_id,country,
+      regexp_replace(tok,'^0+','') tok
+    FROM (SELECT entity_id,country,unnest(regexp_extract_all(lower(business_address),'[0-9]+')) tok FROM queries)
+    WHERE length(tok)>=2 AND regexp_replace(tok,'^0+','')!=''
+""")
+con.execute(f"""
+    CREATE TEMP TABLE t_num_tokens AS
+    SELECT DISTINCT entity_id target_id,country,
+      regexp_replace(tok,'^0+','') tok
+    FROM (SELECT entity_id,country,unnest(regexp_extract_all(lower(business_address),'[0-9]+')) tok FROM ({targets}))
+    WHERE length(tok)>=2 AND regexp_replace(tok,'^0+','')!=''
+""")
+con.execute("CREATE TEMP TABLE df_num AS SELECT country,tok,count(*) df FROM t_num_tokens GROUP BY country,tok")
+out["rescue"]["address_number"] = {}
+for max_df,n_tokens in ((100,1),(500,1),(500,2),(1000,2)):
+    route=f"num_df{max_df}_top{n_tokens}"
+    con.execute(f"""
+        CREATE TEMP TABLE q_{route} AS
+        SELECT s1_id,country,tok FROM (
+          SELECT q.s1_id,q.country,q.tok,d.df,
+                 row_number() OVER (PARTITION BY q.s1_id ORDER BY d.df,q.tok) rn
+          FROM q_num_tokens q JOIN df_num d USING(country,tok) WHERE d.df<={max_df}
+        ) WHERE rn<={n_tokens}
+    """)
+    con.execute(f"""
+        CREATE TEMP TABLE pairs_{route} AS
+        SELECT DISTINCT q.s1_id,t.target_id FROM q_{route} q JOIN t_num_tokens t USING(country,tok)
+    """)
+    con.execute(f"CREATE OR REPLACE TEMP TABLE pairs_num_rescued AS SELECT * FROM pairs_rescued_core UNION SELECT * FROM pairs_{route}")
+    hits=set(con.execute("""
+        SELECT p.s1_id,p.target_id FROM pairs_num_rescued p JOIN truth_edges e USING(s1_id,target_id)
+    """).fetchall())
+    n=con.execute("SELECT count(*) FROM pairs_num_rescued").fetchone()[0]
+    out["rescue"]["address_number"][route]={
+      "candidate_pairs":n,"incremental_candidate_pairs":n-out["rescue"]["core"]["candidate_pairs"],
+      "true_pairs":len(hits),"incremental_true_links":len(hits)-out["rescue"]["core"]["true_pairs"],
+      "edge_recall":len(hits)/len(edges),"complete_set_recall_nonempty":complete_set_recall(hits),
+      "oracle_macro_f05_ceiling":oracle_macro_f05(hits)}
+    print("rescue",route,out["rescue"]["address_number"][route],flush=True)
 case_rows = []
 for s1_id,target_id,country,s1_name,s1_addr,t_name,t_addr in truth_rows:
     pair = (s1_id,target_id)
