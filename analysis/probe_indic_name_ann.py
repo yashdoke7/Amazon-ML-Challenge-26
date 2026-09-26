@@ -44,6 +44,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--field", choices=["business_name", "business_address"],
                         default="business_name")
+    parser.add_argument("--exact-gpu", action="store_true",
+                        help="Stream exact cosine top-100 on GPU without a large HNSW index")
     args = parser.parse_args()
     field = args.field
     started = time.perf_counter()
@@ -96,20 +98,37 @@ def main():
         vectors[first:last] = encoder.encode(names[first:last], batch_size=128, device="cuda",
                                              show_progress_bar=False, normalize_embeddings=True)
         print("encoded", last, "of", len(names), "seconds", round(time.perf_counter()-started, 1), flush=True)
-    print("building HNSW", len(names), flush=True)
-    index = hnswlib.Index(space="cosine", dim=384)
-    index.init_index(max_elements=len(names), ef_construction=80, M=16)
-    index.set_num_threads(4)
-    for first in range(0, len(names), 50_000):
-        last = min(first+50_000, len(names))
-        index.add_items(vectors[first:last], np.arange(first, last), num_threads=4)
-        print("indexed", last, "of", len(names), "seconds", round(time.perf_counter()-started, 1), flush=True)
-    index.set_ef(200)
     unique_queries = list(dict.fromkeys(q for q, _ in misses))
     query_vectors = encoder.encode([queries[q] for q in unique_queries], batch_size=128,
                                    device="cuda", show_progress_bar=False,
                                    normalize_embeddings=True)
-    neighbors, distances = index.knn_query(query_vectors, k=100, num_threads=4)
+    if args.exact_gpu:
+        del encoder
+        torch.cuda.empty_cache()
+        target_tensor = torch.as_tensor(vectors, device="cuda")
+        del vectors
+        query_tensor = torch.as_tensor(query_vectors, dtype=torch.float16, device="cuda")
+        found = []
+        for first in range(0, len(unique_queries), 16):
+            last = min(first+16, len(unique_queries))
+            similarities = query_tensor[first:last] @ target_tensor.T
+            found.append(similarities.topk(100, dim=1).indices.cpu().numpy())
+            if first % 256 == 0:
+                print("exact_queried", last, "of", len(unique_queries),
+                      "seconds", round(time.perf_counter()-started, 1), flush=True)
+        neighbors = np.concatenate(found)
+    else:
+        print("building HNSW", len(names), flush=True)
+        index = hnswlib.Index(space="cosine", dim=384)
+        index.init_index(max_elements=len(names), ef_construction=80, M=16)
+        index.set_num_threads(4)
+        for first in range(0, len(names), 50_000):
+            last = min(first+50_000, len(names))
+            index.add_items(vectors[first:last], np.arange(first, last), num_threads=4)
+            print("indexed", last, "of", len(names),
+                  "seconds", round(time.perf_counter()-started, 1), flush=True)
+        index.set_ef(200)
+        neighbors, _ = index.knn_query(query_vectors, k=100, num_threads=4)
     locations = {q: i for i, q in enumerate(unique_queries)}
     counts = defaultdict(int)
     for q, true_index in misses:
@@ -119,7 +138,7 @@ def main():
         for k in (1, 5, 10, 20, 50, 100):
             counts[f"name_recall_at_{k}"] += bool(len(position) and position[0] < k)
     volumes = [sum(ids_per_name[j] for j in row[:50]) for row in neighbors]
-    result = {"field": field,
+    result = {"field": field, "retrieval": "exact_gpu" if args.exact_gpu else "hnsw",
               "all_target_records": indic_records,
               "all_target_distinct_texts": len(names),
               "eligible_missing_true_links": len(misses),
