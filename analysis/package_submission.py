@@ -20,20 +20,25 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--team-name",required=True)
     parser.add_argument("--check-ids",action="store_true")
-    parser.add_argument("--variant",choices=["baseline","number"],default="baseline")
+    parser.add_argument("--variant",choices=["baseline","number","compact_number"],default="baseline")
     args=parser.parse_args()
     safe_name=re.sub(r"[^A-Za-z0-9_-]+","_",args.team_name.strip()).strip("_")
     if not safe_name:
         raise SystemExit("Provide the registered team name")
-    is_number=args.variant=="number"
-    doc=ROOT / "docs" / "Documentation_number_model.md" if is_number else ROOT / "Documentation_template.md"
+    is_number=args.variant in ("number","compact_number")
+    is_compact=args.variant=="compact_number"
+    doc=(ROOT / "docs" / "Documentation_compact_number.md" if is_compact else
+         ROOT / "docs" / "Documentation_number_model.md" if is_number else
+         ROOT / "Documentation_template.md")
     if not doc.is_file():
         raise SystemExit(f"Missing methodology document: {doc}")
     content=doc.read_text(encoding="utf-8")
-    if "[Registered team name]" in content or "[Registered member names]" in content or "[Fill after complete run" in content:
+    if ("[Registered team name]" in content or "[Registered member names]" in content or
+            "[Fill after complete run" in content or "[Fill after compact run" in content):
         raise SystemExit("Fill the methodology template before packaging")
-    matching=OUTPUT / ("number_results.tsv" if is_number else "matching_results.tsv")
-    candidates=OUTPUT / "candidate_pairs.tsv"
+    matching=OUTPUT / ("compact_number_results.tsv" if is_compact else
+                       "number_results.tsv" if is_number else "matching_results.tsv")
+    candidates=OUTPUT / ("compact_candidate_pairs.tsv" if is_compact else "candidate_pairs.tsv")
     verify(RESOURCE / "dataset" / "test",matching,candidates)
     # The supplied validator retains every candidate ID in Python sets and
     # exceeds this machine's RAM at full scale. The streaming check above
@@ -52,7 +57,8 @@ def main():
     for path in source_files+required:
         if not path.is_file():
             raise SystemExit(f"Missing required file: {path}")
-    suffix="_number_submission.zip" if is_number else "_submission.zip"
+    suffix=("_compact_submission.zip" if is_compact else
+            "_number_submission.zip" if is_number else "_submission.zip")
     archive=OUTPUT / f"{safe_name}{suffix}"
     with zipfile.ZipFile(archive,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=3,allowZip64=True) as bundle:
         bundle.write(matching,"output/matching_results.tsv")

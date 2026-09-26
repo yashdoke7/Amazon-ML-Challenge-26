@@ -82,7 +82,7 @@ def main():
           "10.32 million targets, and 7.64 million labeled links. Test adds France with no French "
           "training labels. The metric is macro F0.5 over Source 1 groups, so false merges and "
           "missed singletons matter alongside retrieval recall."),
-        H("1. Retrieve a bounded, complementary candidate set"),
+        H("1. Retrieve broad candidates with complementary routes"),
         P("A local DuckDB index stores Unicode name and address tokens, target frequencies, and "
           "compact legal-suffix name keys. Each query uses rare name and address token postings "
           "within the same country. Separate name and address Jaro-Winkler top-100 quotas protect "
@@ -90,12 +90,14 @@ def main():
           "equality rescue punctuation and French accents. For India, an additional top-50 "
           "address-token-overlap channel helps cross-script names. Country is an open-set string, "
           "so France is processed without hard-coded exclusion."),
-        H("2. Score pairs with a locally trained model"),
-        P("A LightGBM classifier trained on 3.95 million retrieved pairs from a seeded 20,000-query "
-          "training sample uses 27 features: Unicode-normalized name and address similarities, "
-          "token overlap, source/missingness signals, and four soft first-address-number features. "
-          "It uses only supplied data; no external business lookup or remote inference. The "
-          "score threshold is 0.75, with a development-selected India override of 0.65."),
+        H("2. Learned last-stage block, then final matching"),
+        P("A frozen 23-feature LightGBM ranks the broad union and passes at most 40 candidates "
+          "per Source 1 to a separate 27-feature final LightGBM. The recorded candidate TSV is "
+          "exactly this last-stage set. On all 22,133 development queries, it retained "
+          "70,735/70,741 broad-reachable true links and every final selected link. The final model "
+          "was trained on 3.95 million pairs from 20,000 training queries; its features include "
+          "name/address similarities, token overlap, source signals, and soft address-number "
+          "agreement. It uses only supplied data, with threshold 0.75 and India override 0.65."),
         H("3. Resolve group and ownership conflicts"),
         P("Rank selected links by model probability and retain at most 11 per Source 1, the largest "
           "true group in the full training labels. Assign a target predicted by multiple Source 1 "
@@ -121,6 +123,7 @@ def main():
          Paragraph("Scope", styles["TableHeadCustom"]),
          Paragraph("Result", styles["TableHeadCustom"])],
         ["Combined candidate oracle", "22,133 development queries", "0.96793 upper bound"],
+        ["Learned top-40 oracle", "22,133 development queries", "0.96788 upper bound"],
         ["Original 23-feature baseline", "Full development, 3 output passes", "0.88331"],
         ["27-feature model, uniform 0.75", "Full development, cap + owner", "0.89574"],
         ["27-feature model, India 0.65", "Full development, cap + owner", "0.89761"],
@@ -141,6 +144,8 @@ def main():
         H("What the measurements mean"),
         B("The candidate oracle assumes perfect scoring on retrieved pairs. It measures the "
           "retrieval ceiling, not an achieved model score."),
+        B("The learned top-40 block was chosen for the portal's 512 MB ZIP limit. "
+          "Unlike a lexical top-40 quota, it preserved all final selected development links."),
         B("The India override improved frozen validation from 0.89091 to 0.89272 and full "
           "development from 0.89574 to 0.89761; it also added false links and reduced "
           "singleton accuracy. The challenge metric favored it on both checks."),
@@ -148,11 +153,11 @@ def main():
           "tail remained after scoring, so the top-11 cap is retained. No French F0.5 is claimed."),
         H("Reproducibility and fair play"),
         P("The final ZIP contains the exact last-stage candidate TSV, matching TSV, runnable "
-          "Python source, both locally trained model weights required by the pipeline, pinned "
-          "dependencies, and the full methodology. The candidate TSV lists every pair fed to "
-          "the final scoring model, and every predicted ID is a member of that row's candidate "
-          "set. Streaming and official validators are run before submission. No supplied record "
-          "text is sent to a remote service."),
+          "Python source, both locally trained model weights, pinned dependencies, and the full "
+          "methodology. The broad lexical union is a reproducible intermediate; the submitted "
+          "candidate TSV lists every pair fed to the final matcher. Every predicted ID belongs "
+          "to that set. Streaming and official validators are run before submission. No supplied "
+          "record text is sent to a remote service."),
         H("Team"),
         P("Yash Kailas Doke, Harsh Jitendra Jain, Ayush Tiwari, and Vedant Kaulgekar."),
     ]

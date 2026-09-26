@@ -39,6 +39,8 @@ It must have exactly one row for each test Source 1 ID, including empty second f
 
 The code copy must regenerate both output files end to end from supplied train/test TSVs, with pinned dependencies and exact instructions. Fill the supplied methodology template with problem analysis, blocking, features/model, threshold selection, validation, error analysis, and results. The challenge-specific PDF says there is no page limit. The general Unstop page says 1–2 pages; check the portal for a hard file/page limit.
 
+The team reports that the live portal caps the final ZIP upload at **512 MB**. The original 353.9-million-pair baseline ZIP is 2.02 GB and therefore cannot be submitted there. A compact last-stage candidate set must be generated and validated before the final archive is used; do not merely omit the required candidate file. This limit came from the team's portal observation, not the supplied PDF.
+
 Run the supplied `utils/validate_submission.py` against both outputs and `dataset/test`. Use `--check-ids` if memory permits; it performs the optional target-existence check. Also independently verify the output row set, IDs, candidate subset, and reproducibility.
 
 ## Fair play and model constraints
