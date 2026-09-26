@@ -20,15 +20,19 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--team-name",required=True)
     parser.add_argument("--check-ids",action="store_true")
+    parser.add_argument("--variant",choices=["baseline","number"],default="baseline")
     args=parser.parse_args()
     safe_name=re.sub(r"[^A-Za-z0-9_-]+","_",args.team_name.strip()).strip("_")
     if not safe_name:
         raise SystemExit("Provide the registered team name")
-    doc=ROOT / "Documentation_template.md"
+    is_number=args.variant=="number"
+    doc=ROOT / "docs" / "Documentation_number_model.md" if is_number else ROOT / "Documentation_template.md"
+    if not doc.is_file():
+        raise SystemExit(f"Missing methodology document: {doc}")
     content=doc.read_text(encoding="utf-8")
     if "[Registered team name]" in content or "[Registered member names]" in content or "[Fill after complete run" in content:
         raise SystemExit("Fill the methodology template before packaging")
-    matching=OUTPUT / "matching_results.tsv"
+    matching=OUTPUT / ("number_results.tsv" if is_number else "matching_results.tsv")
     candidates=OUTPUT / "candidate_pairs.tsv"
     verify(RESOURCE / "dataset" / "test",matching,candidates)
     # The supplied validator retains every candidate ID in Python sets and
@@ -41,17 +45,21 @@ def main():
         command.append("--check-ids")
     subprocess.run(command,check=True)
     source_files=[p for p in (PACKAGE / "src").glob("*.py")]
-    required=[PACKAGE / "README.md",PACKAGE / "requirements.txt",PACKAGE / "model.joblib",doc,matching,candidates]
+    models=[PACKAGE / "model.joblib"]
+    if is_number:
+        models.append(PACKAGE / "number_model.joblib")
+    required=[PACKAGE / "README.md",PACKAGE / "requirements.txt",*models,doc,matching,candidates]
     for path in source_files+required:
         if not path.is_file():
             raise SystemExit(f"Missing required file: {path}")
-    archive=OUTPUT / f"{safe_name}_submission.zip"
+    suffix="_number_submission.zip" if is_number else "_submission.zip"
+    archive=OUTPUT / f"{safe_name}{suffix}"
     with zipfile.ZipFile(archive,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=3,allowZip64=True) as bundle:
-        for path in (matching,candidates):
+        bundle.write(matching,"output/matching_results.tsv")
+        bundle.write(candidates,"output/candidate_pairs.tsv")
+        for path in [PACKAGE / "README.md",PACKAGE / "requirements.txt",*models]+source_files:
             bundle.write(path,path.relative_to(ROOT).as_posix())
-        for path in [PACKAGE / "README.md",PACKAGE / "requirements.txt",PACKAGE / "model.joblib"]+source_files:
-            bundle.write(path,path.relative_to(ROOT).as_posix())
-        bundle.write(doc,doc.name)
+        bundle.write(doc,"Documentation_template.md")
     with zipfile.ZipFile(archive) as bundle:
         bad=bundle.testzip()
         if bad:
