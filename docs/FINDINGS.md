@@ -36,6 +36,8 @@ The first 20,000 unlabeled test queries were rescored with this exact 27-feature
 
 A country-threshold probe held the new model fixed and selected an **India-only threshold 0.65** on the separate 2,000-query development sample, keeping 0.75 for US and unlabeled countries. Development macro F0.5 rose 0.89772→0.90052 and frozen 2,000-query validation rose **0.89091→0.89272**. Re-running all 22,133 development queries through saved candidates, cap, and exclusive ownership raised macro F0.5 **0.89574→0.89761**; India 0.84321→0.84791, US unchanged 0.93056. The price was 1,012 more true links alongside 518 more false links, and singleton accuracy fell 90.80%→88.52%. The challenge metric favors this setting on both held-out checks, but a public score must settle the final choice. France remains at the global 0.75 threshold.
 
+On the first 20,000 unlabeled test queries, this override added 1,926 India links after cap+owner and reduced India empty predictions 960→820 out of 9,263. No India links were removed relative to the same model at 0.75; all groups stayed at most 11. US and France outputs were unchanged byte for byte. This verifies the override's scope and format, not its hidden-test quality.
+
 An attempted high-confidence target-to-target propagation added many false links: five strict name/address seed rules all reduced F0.5 on separate 2,000-query development and validation sets. Do not add this heuristic. The next large gains likely require better training features or actual candidate rescue, not naive propagation.
 
 ## Facts established from the supplied data
