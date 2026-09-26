@@ -12,7 +12,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from features import FEATURE_NAMES, pair_features
+from model_features import extractor_for
 
 
 def cap_results(data_dir, db_path, model_path, input_path, output_path, cap):
@@ -46,15 +46,15 @@ def cap_results(data_dir, db_path, model_path, input_path, output_path, cap):
     """).df()
     con.close()
     assert len(frame)==len(selected)
-    features=np.empty((len(frame),len(FEATURE_NAMES)),dtype=np.float32)
+    model=joblib.load(model_path)
+    feature_names,feature_function=extractor_for(model)
+    features=np.empty((len(frame),len(feature_names)),dtype=np.float32)
     for i,row in enumerate(frame.itertuples(index=False)):
         query=queries[row.s1_id]
-        features[i]=pair_features(query["business_name"],row.business_name,
-                                  query["business_address"],row.business_address,row.source)
+        features[i]=feature_function(query["business_name"],row.business_name,
+                                     query["business_address"],row.business_address,row.source)
         if i and i%100_000==0:
             print("scored features",i,"seconds",round(time.perf_counter()-tic,1),flush=True)
-    model=joblib.load(model_path)
-    assert list(model.feature_name_)==FEATURE_NAMES
     probs=model.predict_proba(features)[:,1]
     ranked=defaultdict(list)
     for (s1,target),prob in zip(frame[["s1_id","target_id"]].itertuples(index=False,name=None),probs):

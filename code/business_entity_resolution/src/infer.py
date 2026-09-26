@@ -10,7 +10,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from features import FEATURE_NAMES, pair_features
+from model_features import extractor_for
 
 
 LEGAL = r"(^|[^a-z])(inc|llc|ltd|limited|private|pvt|corp|corporation|llp|co|company|sas|sarl|sa|eurl)([^a-z]|$)"
@@ -131,7 +131,7 @@ def infer(data_dir, db_path, model_path, output_dir, threshold, batch_size, want
     con.execute("SET memory_limit='20GB'")
     con.execute("SET threads=8")
     model = joblib.load(model_path)
-    assert list(model.feature_name_) == FEATURE_NAMES
+    feature_names,feature_function = extractor_for(model)
     query_file = data_dir / f"{data_dir.name}_source1.tsv"
     result_path = output_dir / "matching_results.tsv"
     candidate_path = output_dir / "candidate_pairs.tsv"
@@ -166,9 +166,10 @@ def infer(data_dir, db_path, model_path, output_dir, threshold, batch_size, want
             ids = {row["entity_id"]: [] for row in rows}
             predictions = {row["entity_id"]: [] for row in rows}
             if len(frame):
-                features = np.empty((len(frame),len(FEATURE_NAMES)),dtype=np.float32)
+                features = np.empty((len(frame),len(feature_names)),dtype=np.float32)
                 for i,row in enumerate(frame.itertuples(index=False)):
-                    features[i] = pair_features(row.q_name,row.t_name,row.q_address,row.t_address,row.target_source)
+                    features[i] = feature_function(row.q_name,row.t_name,row.q_address,
+                                                   row.t_address,row.target_source)
                 probabilities = model.predict_proba(features)[:,1]
                 for (s1,target),prob in zip(frame[["s1_id","target_id"]].itertuples(index=False,name=None),probabilities):
                     ids[s1].append(target)

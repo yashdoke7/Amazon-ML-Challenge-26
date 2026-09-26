@@ -11,7 +11,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from features import FEATURE_NAMES, pair_features
+from model_features import extractor_for
 
 
 def resolve(data_dir, db_path, model_path, input_path, output_path):
@@ -51,13 +51,13 @@ def resolve(data_dir, db_path, model_path, input_path, output_path):
     """).df()
     con.close()
     assert len(frame)==len(pairs)
-    features=np.empty((len(frame),len(FEATURE_NAMES)),dtype=np.float32)
+    model=joblib.load(model_path)
+    feature_names,feature_function=extractor_for(model)
+    features=np.empty((len(frame),len(feature_names)),dtype=np.float32)
     for i,row in enumerate(frame.itertuples(index=False)):
         query=queries[row.s1_id]
-        features[i]=pair_features(query["business_name"],row.business_name,
-                                  query["business_address"],row.business_address,row.source)
-    model=joblib.load(model_path)
-    assert list(model.feature_name_)==FEATURE_NAMES
+        features[i]=feature_function(query["business_name"],row.business_name,
+                                     query["business_address"],row.business_address,row.source)
     probs=model.predict_proba(features)[:,1]
     scored=defaultdict(list)
     for (s1,target),prob in zip(frame[["s1_id","target_id"]].itertuples(index=False,name=None),probs):

@@ -34,7 +34,15 @@ python utils/validate_submission.py --matching output/matching_results.tsv --can
 
 Inference writes one row per test Source 1 entity, including empty match/candidate lists. The final matches are always drawn from that row's last-stage candidate set. If inference stops between complete batches, rerun the same inference command with `--resume`; it checks that both output files have matching row IDs before appending. If a process stopped during the write of one batch, repair or discard that partial batch first. Apply the cap, exclusive-owner resolution, and US number-consistency pass only after inference finishes. The supplied validator holds all candidate IDs in memory and is too large for this machine at full scale; the streaming validator checks both files and their subset relation, while the supplied validator checks final match ID existence.
 
-`src/rescore_candidates.py` can apply a different compatible 23-feature model to the saved `candidate_pairs.tsv` without rebuilding the index or rerunning retrieval. Its optional `--workers 4` uses four CPU processes for exact string features. On a 1,000-query test slice, four workers took 4.4 seconds versus 7.9 seconds serially, with identical output; a full rescore still takes hours and needs a separate output path. The current pipeline does not use the GPU.
+`src/rescore_candidates.py` can apply a different compatible 23- or 27-feature model to the saved `candidate_pairs.tsv` without rebuilding the index or rerunning retrieval. The optional `number_model.joblib` has 27 features and uses threshold 0.75; for that model apply the cap and exclusive-owner passes but omit `veto_nearby_number.py`. Its optional `--workers 4` uses four CPU processes for exact string features. On a 1,000-query baseline slice, four workers took 4.4 seconds versus 7.9 seconds serially, with identical output; a full rescore still takes hours and needs a separate output path. The current pipeline does not use the GPU.
+
+To generate the optional variant after the baseline output is safely preserved, use separate result paths:
+
+```powershell
+python code/business_entity_resolution/src/rescore_candidates.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/number_model.joblib --candidate output/candidate_pairs.tsv --output output/number_results_uncapped.tsv --threshold 0.75 --workers 4
+python code/business_entity_resolution/src/cap_predictions.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/number_model.joblib --input output/number_results_uncapped.tsv --output output/number_results_capped.tsv --cap 11
+python code/business_entity_resolution/src/resolve_exclusivity.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/number_model.joblib --input output/number_results_capped.tsv --output output/number_results.tsv
+```
 
 ## Method and reproducibility
 
@@ -45,6 +53,7 @@ To rebuild `model.joblib` from the supplied training data, first index `dataset/
 ```powershell
 python code/business_entity_resolution/src/build_index.py --data-dir dataset/train --db train_index.duckdb
 python code/business_entity_resolution/src/train.py --data-dir dataset/train --db train_index.duckdb --model-out code/business_entity_resolution/model_rebuilt.joblib
+python code/business_entity_resolution/src/train.py --data-dir dataset/train --db train_index.duckdb --model-out code/business_entity_resolution/number_model_rebuilt.joblib --sample-size 20000 --number-features
 ```
 
 The bundled weights are the frozen tested model. Rebuilt weights can differ slightly with library/hardware ordering, so use the bundled model for exact output reproduction. Threshold 0.65 is provisional from the local development/validation experiments recorded in the repository's `docs/FINDINGS.md`.

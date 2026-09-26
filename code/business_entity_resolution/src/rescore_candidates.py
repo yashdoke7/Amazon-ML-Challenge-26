@@ -7,6 +7,7 @@ import time
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import nullcontext
+from functools import partial
 from pathlib import Path
 
 import duckdb
@@ -14,17 +15,21 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from features import FEATURE_NAMES, pair_features
+from model_features import extractor_for
 
 
-def featurize_rows(rows):
-    features=np.empty((len(rows),len(FEATURE_NAMES)),dtype=np.float32)
+def featurize_rows(rows, model_feature_names):
+    from features import FEATURE_NAMES, pair_features
+    from number_features import NUMBER_FEATURE_NAMES, number_pair_features
+    feature_function=pair_features if model_feature_names==FEATURE_NAMES else number_pair_features
+    assert model_feature_names in (FEATURE_NAMES,NUMBER_FEATURE_NAMES)
+    features=np.empty((len(rows),len(model_feature_names)),dtype=np.float32)
     for i,(q_name,t_name,q_address,t_address,source) in enumerate(rows):
-        features[i]=pair_features(q_name,t_name,q_address,t_address,source)
+        features[i]=feature_function(q_name,t_name,q_address,t_address,source)
     return features
 
 
-def rescore_batch(con, model, rows, threshold, writer, pool=None):
+def rescore_batch(con, model, model_feature_names, rows, threshold, writer, pool=None):
     queries={q["entity_id"]:q for q,_ in rows}
     pairs=[(q["entity_id"],target) for q,ids in rows for target in ids]
     predictions=defaultdict(list)
@@ -42,10 +47,10 @@ def rescore_batch(con, model, rows, threshold, writer, pool=None):
             feature_rows.append((query["business_name"],row.business_name,
                                  query["business_address"],row.business_address,row.source))
         if pool is None:
-            features=featurize_rows(feature_rows)
+            features=featurize_rows(feature_rows,model_feature_names)
         else:
             chunks=(feature_rows[i:i+50_000] for i in range(0,len(feature_rows),50_000))
-            features=np.concatenate(list(pool.map(featurize_rows,chunks)))
+            features=np.concatenate(list(pool.map(partial(featurize_rows,model_feature_names=model_feature_names),chunks)))
         probabilities=model.predict_proba(features)[:,1]
         for (s1,target),prob in zip(frame[["s1_id","target_id"]].itertuples(index=False,name=None),probabilities):
             if prob>=threshold:
@@ -63,7 +68,7 @@ def rescore(data_dir, db_path, model_path, candidate_path, output_path, threshol
     con.execute("SET memory_limit='20GB'")
     con.execute("SET threads=8")
     model=joblib.load(model_path)
-    assert list(model.feature_name_)==FEATURE_NAMES
+    model_feature_names,_=extractor_for(model)
     query_path=data_dir / f"{data_dir.name}_source1.tsv"
     output_path.parent.mkdir(parents=True,exist_ok=True)
     tic=time.perf_counter()
@@ -87,7 +92,7 @@ def rescore(data_dir, db_path, model_path, candidate_path, output_path, threshol
             assert len(ids)==len(set(ids)),("duplicate candidate",total_queries)
             batch.append((q,ids))
             if len(batch)>=batch_size:
-                n_pairs,n_matches=rescore_batch(con,model,batch,threshold,writer,pool)
+                n_pairs,n_matches=rescore_batch(con,model,model_feature_names,batch,threshold,writer,pool)
                 total_queries+=len(batch)
                 total_pairs+=n_pairs
                 total_matches+=n_matches
@@ -96,7 +101,7 @@ def rescore(data_dir, db_path, model_path, candidate_path, output_path, threshol
                       "seconds",round(time.perf_counter()-tic,1),flush=True)
                 batch=[]
         if batch:
-            n_pairs,n_matches=rescore_batch(con,model,batch,threshold,writer,pool)
+            n_pairs,n_matches=rescore_batch(con,model,model_feature_names,batch,threshold,writer,pool)
             total_queries+=len(batch)
             total_pairs+=n_pairs
             total_matches+=n_matches
