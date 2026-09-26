@@ -1,7 +1,7 @@
 """Create a compact learned block and final matches from broad saved candidates.
 
 The 23-feature model is used only to rank the broad lexical candidate pool.
-At most K candidates per Source 1 pass to the distinct 27-feature final matcher.
+At most K candidates per Source 1 pass to the distinct final matcher.
 The written candidate TSV is precisely that last set passed to the matcher.
 Both models use only locally supplied records and bundled frozen weights.
 """
@@ -20,12 +20,14 @@ import numpy as np
 import pandas as pd
 
 from features import FEATURE_NAMES
+from generalized_features import GENERALIZED_FEATURE_NAMES
 from model_features import extractor_for
 from rescore_candidates import featurize_rows
 
 
 def process_batch(con, blocker, matcher, rows, candidate_writer, match_writer,
-                  pool, top_k, thresholds, default_threshold, model_feature_names):
+                  pool, top_k, thresholds, default_threshold, model_feature_names,
+                  blank_specialist=None, blank_threshold=0.8):
     queries = {q["entity_id"]: q for q, _ in rows}
     pairs = [(q["entity_id"], target) for q, ids in rows for target in ids]
     retained = {q["entity_id"]: [] for q, _ in rows}
@@ -39,6 +41,7 @@ def process_batch(con, blocker, matcher, rows, candidate_writer, match_writer,
         con.unregister("batch_pairs")
         if len(frame) != len(pairs):
             raise ValueError("Broad candidate target is missing from the target index")
+        frame["business_address"] = frame.business_address.fillna("")
         feature_rows = []
         for row in frame.itertuples(index=False):
             q = queries[row.s1_id]
@@ -58,9 +61,31 @@ def process_batch(con, blocker, matcher, rows, candidate_writer, match_writer,
         # final matcher and reported in the submission artifact.
         frame["final_prob"] = matcher.predict_proba(
             features[frame["feature_index"].to_numpy()])[:, 1]
+        if blank_specialist is not None:
+            blank = frame.business_address.fillna("").eq("").to_numpy()
+            if blank.any():
+                blank_rows = frame.loc[blank]
+                con.register("blank_batch", pd.DataFrame({
+                    "target_id": blank_rows.target_id.drop_duplicates()}))
+                frequencies = con.execute("""SELECT b.target_id,f.df FROM blank_batch b
+                    JOIN blank_target_frequency f USING(target_id)""").fetchall()
+                con.unregister("blank_batch")
+                frequency = dict(frequencies)
+                if len(frequency) != blank_rows.target_id.nunique():
+                    raise ValueError("A blank-address target lacks name frequency")
+                specialist_features = np.empty((len(blank_rows), 36), dtype=np.float32)
+                specialist_features[:, :35] = features[
+                    blank_rows.feature_index.to_numpy()]
+                specialist_features[:, 35] = np.log1p(
+                    [frequency[t] for t in blank_rows.target_id])
+                frame.loc[blank, "final_prob"] = blank_specialist.predict_proba(
+                    specialist_features)[:, 1]
         for row in frame.itertuples(index=False):
             retained[row.s1_id].append(row.target_id)
-            threshold = thresholds.get(queries[row.s1_id]["country"], default_threshold)
+            if blank_specialist is not None and not row.business_address:
+                threshold = blank_threshold
+            else:
+                threshold = thresholds.get(queries[row.s1_id]["country"], default_threshold)
             if row.final_prob >= threshold:
                 predictions[row.s1_id].append(row.target_id)
     for q, _ in rows:
@@ -72,7 +97,7 @@ def process_batch(con, blocker, matcher, rows, candidate_writer, match_writer,
 
 def run(data_dir, db_path, broad_path, candidate_path, matching_path,
         top_k, workers, batch_size, maximum, thresholds, default_threshold,
-        matcher_path, wanted):
+        matcher_path, wanted, blank_specialist_path=None, blank_threshold=0.8):
     if len({broad_path.resolve(), candidate_path.resolve(), matching_path.resolve()}) != 3:
         raise ValueError("Input and output paths must be distinct")
     if top_k < 1 or workers < 1 or batch_size < 1:
@@ -85,9 +110,16 @@ def run(data_dir, db_path, broad_path, candidate_path, matching_path,
     package = Path(__file__).resolve().parents[1]
     blocker = joblib.load(package / "model.joblib")
     matcher = joblib.load(matcher_path or package / "number_model.joblib")
+    blank_specialist = joblib.load(blank_specialist_path) if blank_specialist_path else None
     model_feature_names, _ = extractor_for(matcher)
     if list(blocker.feature_name_) != FEATURE_NAMES or model_feature_names[:len(FEATURE_NAMES)] != FEATURE_NAMES:
         raise ValueError("Unexpected bundled model feature contract")
+    if blank_specialist is not None:
+        expected = GENERALIZED_FEATURE_NAMES + ["log_target_core_frequency"]
+        if model_feature_names != GENERALIZED_FEATURE_NAMES or list(blank_specialist.feature_name_) != expected:
+            raise ValueError("Unexpected blank-address specialist feature contract")
+        if not con.execute("SELECT count(*) FROM information_schema.tables WHERE table_name='blank_target_frequency'").fetchone()[0]:
+            raise ValueError("Rebuild the index to add blank_target_frequency")
     started = time.perf_counter()
     total_queries = broad_pairs = final_pairs = matches = 0
     query_path = data_dir / f"{data_dir.name}_source1.tsv"
@@ -119,7 +151,8 @@ def run(data_dir, db_path, broad_path, candidate_path, matching_path,
             if len(batch) >= batch_size:
                 n_broad, n_final, n_match = process_batch(
                     con, blocker, matcher, batch, candidate_writer, match_writer,
-                    pool, top_k, thresholds, default_threshold, model_feature_names)
+                    pool, top_k, thresholds, default_threshold, model_feature_names,
+                    blank_specialist, blank_threshold)
                 total_queries += len(batch)
                 broad_pairs += n_broad
                 final_pairs += n_final
@@ -135,7 +168,8 @@ def run(data_dir, db_path, broad_path, candidate_path, matching_path,
         if batch:
             n_broad, n_final, n_match = process_batch(
                 con, blocker, matcher, batch, candidate_writer, match_writer,
-                pool, top_k, thresholds, default_threshold, model_feature_names)
+                pool, top_k, thresholds, default_threshold, model_feature_names,
+                blank_specialist, blank_threshold)
             total_queries += len(batch)
             broad_pairs += n_broad
             final_pairs += n_final
@@ -159,6 +193,8 @@ if __name__ == "__main__":
     parser.add_argument("--max-queries", type=int)
     parser.add_argument("--query-ids", type=Path)
     parser.add_argument("--matcher-model", type=Path)
+    parser.add_argument("--blank-specialist-model", type=Path)
+    parser.add_argument("--blank-threshold", type=float, default=0.8)
     parser.add_argument("--threshold", type=float, default=0.75)
     parser.add_argument("--country-threshold", action="append", default=[], metavar="COUNTRY:VALUE")
     args = parser.parse_args()
@@ -170,4 +206,5 @@ if __name__ == "__main__":
         args.matching, args.top_k, args.workers, args.batch_size,
         args.max_queries, thresholds, args.threshold, args.matcher_model,
         set(args.query_ids.read_text(encoding="utf-8").splitlines())
-        if args.query_ids else None)
+        if args.query_ids else None, args.blank_specialist_model,
+        args.blank_threshold)

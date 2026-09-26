@@ -56,6 +56,27 @@ def build(data_dir: Path, db_path: Path):
         con.execute(f"CREATE TABLE target_keys AS SELECT target_id,country,{core} core_key,strip_accents({core}) accent_key FROM target")
         con.execute("INSERT INTO index_meta VALUES ('keys', '1')")
         print("target keys seconds", round(time.perf_counter()-tic, 1), flush=True)
+    if "blank_target_frequency" not in done:
+        tic = time.perf_counter()
+        con.execute("""
+            CREATE TABLE blank_target_frequency AS
+            WITH blank_keys AS (
+                SELECT k.target_id,k.country,k.core_key FROM target_keys k
+                JOIN target t USING(target_id)
+                WHERE coalesce(t.business_address,'')=''
+            ), wanted AS (
+                SELECT DISTINCT country,core_key FROM blank_keys
+            ), frequency AS (
+                SELECT k.country,k.core_key,count(*) df FROM target_keys k
+                JOIN wanted w USING(country,core_key)
+                GROUP BY k.country,k.core_key
+            )
+            SELECT b.target_id,f.df FROM blank_keys b
+            JOIN frequency f USING(country,core_key)
+        """)
+        n = con.execute("SELECT count(*) FROM blank_target_frequency").fetchone()[0]
+        con.execute("INSERT INTO index_meta VALUES ('blank_target_frequency', ?)", [str(n)])
+        print("blank target frequency", n, "seconds", round(time.perf_counter()-tic, 1), flush=True)
     con.close()
 
 

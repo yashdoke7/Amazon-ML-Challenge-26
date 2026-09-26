@@ -69,6 +69,8 @@ def main():
             "--db", DB, "--broad-candidate", broad, "--candidate", compact,
             "--matching", raw, "--top-k", str(TOP_K), "--workers", "4",
             "--matcher-model", PACKAGE / "generalized_model.joblib",
+            "--blank-specialist-model", PACKAGE / "blank_frequency_model.joblib",
+            "--blank-threshold", "0.8",
             "--threshold", "0.75", "--country-threshold", "India:0.65")
     run(PACKAGE / "src" / "cap_predictions.py", "--data-dir", DATA, "--db", DB,
         "--model", PACKAGE / "generalized_model.joblib", "--input", raw,
