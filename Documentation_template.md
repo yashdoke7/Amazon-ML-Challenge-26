@@ -25,7 +25,7 @@ We tokenize Unicode letters/digits in names and addresses and choose each query'
 
 On all 22,133 held-out development Source 1 records, the core route retrieved 91.18% of positive links with 4,518,733 candidate pairs and an oracle macro-F0.5 ceiling of 0.9617. Independently, India address-overlap top 50 added 686 true links for 171,364 more pairs and raised cross-script recall from 62.53% to 70.76%; accent-folded names added 328 links for 53,138 more pairs. On a fixed 2,000-query validation sample, the combined union had 430,900 candidates and 6,418 reachable true links, with a 0.9678 oracle ceiling. An oracle is a candidate upper bound, not model performance.
 
-**Final test candidate pairs:** [Fill after complete run and validator]
+**Final test candidate pairs:** 353,929,494 across 1,732,544 test Source 1 records
 
 ## 4. Matching Model
 
