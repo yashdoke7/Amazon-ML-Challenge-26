@@ -4,7 +4,7 @@ This package generates both required test TSVs using the supplied data and a bun
 
 ## Final selected Unicode-aware compact variant
 
-The final tested variant uses `model.joblib` only as a learned top-40 candidate ranker. The separate `generalized_model.joblib` is the 35-feature final matcher, trained locally on 20,000 seeded training queries. Its added features compare local ASCII-transliterated name/address views while preserving the original text features. `anyascii==0.3.3` is pinned and used only on this machine; there is no external identity lookup or remote model call. The final threshold is 0.80 for every country. The cap of 11 and exclusive-owner pass follow matching.
+The selected variant uses `model.joblib` only as a learned top-40 candidate ranker. The separate `generalized_model.joblib` is the 35-feature final matcher, trained locally from 190,086 sampled training-owned Source 1 queries (a requested 200,000 sample). It retained all 600,773 reachable positive pairs plus 20 model-mined hard negatives and up to five random negatives per query, for 5,246,815 training rows. `generalized_seed_model.joblib` is the earlier 20,000-query 35-feature model used to mine those negatives; it is bundled for exact training reconstruction. The Unicode features compare local ASCII-transliterated name/address views while preserving original text. `anyascii==0.3.3` is pinned; there is no external identity lookup or remote model call. The development-selected final threshold is **0.65 for India and 0.75 for other countries**, including unlabeled France. The cap of 11 and exclusive-owner pass follow matching.
 
 From `student_resource/`, the exact end-to-end reconstruction is:
 
@@ -13,14 +13,21 @@ python -m pip install -r code/business_entity_resolution/requirements.txt
 python code/business_entity_resolution/src/build_index.py --data-dir dataset/test --db test_index.duckdb
 python code/business_entity_resolution/src/infer.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/model.joblib --output-dir output --batch-size 5000 --threshold 0.65
 Move-Item output/candidate_pairs.tsv output/broad_candidate_pairs.tsv
-python code/business_entity_resolution/src/two_stage_rescore.py --data-dir dataset/test --db test_index.duckdb --broad-candidate output/broad_candidate_pairs.tsv --candidate output/candidate_pairs.tsv --matching output/generalized_raw.tsv --matcher-model code/business_entity_resolution/generalized_model.joblib --threshold 0.8 --top-k 40 --workers 4
+python code/business_entity_resolution/src/two_stage_rescore.py --data-dir dataset/test --db test_index.duckdb --broad-candidate output/broad_candidate_pairs.tsv --candidate output/candidate_pairs.tsv --matching output/generalized_raw.tsv --matcher-model code/business_entity_resolution/generalized_model.joblib --threshold 0.75 --country-threshold India:0.65 --top-k 40 --workers 4
 python code/business_entity_resolution/src/cap_predictions.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/generalized_raw.tsv --output output/generalized_capped.tsv --cap 11
 python code/business_entity_resolution/src/resolve_exclusivity.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/generalized_capped.tsv --output output/matching_results.tsv
 python code/business_entity_resolution/src/stream_validate.py --matching output/matching_results.tsv --candidate output/candidate_pairs.tsv --test-dir dataset/test
 python utils/validate_submission.py --matching output/matching_results.tsv --candidate output/__no_candidates__.tsv --test-dir dataset/test --check-ids
 ```
 
-The broad lexical intermediate can be regenerated; only the top-40 set actually passed to the final matcher is submitted as `output/candidate_pairs.tsv`. The supplied validator's candidate check exceeds 32 GB RAM at full scale, so `stream_validate.py` checks every row and the candidate subset relation in bounded memory, while the supplied validator checks match ID existence. `src/train.py --sample-size 20000 --generalized-features` can rebuild the final model from an indexed training set; the bundled weights reproduce the submitted inference exactly. The methodology in `Documentation_template.md` records the measured development/validation comparisons and the French uncertainty.
+The broad lexical intermediate can be regenerated; only the top-40 set actually passed to the final matcher is submitted as `output/candidate_pairs.tsv`. The supplied validator's candidate check exceeds 32 GB RAM at full scale, so `stream_validate.py` checks every row and the candidate subset relation in bounded memory, while the supplied validator checks match ID existence. The bundled weights reproduce the submitted inference exactly. To rebuild the matcher from supplied labels, first build the train index, then run:
+
+```powershell
+python code/business_entity_resolution/src/build_index.py --data-dir dataset/train --db train_index.duckdb
+python code/business_entity_resolution/src/train_hard_negative.py --data-dir dataset/train --db train_index.duckdb --base-model code/business_entity_resolution/generalized_seed_model.joblib --model-out code/business_entity_resolution/generalized_rebuilt.joblib --summary-out output/hard_negative_training_summary.json --sample-size 200000
+```
+
+The methodology in `Documentation_template.md` records the measured development/validation comparisons and the French uncertainty.
 
 ## Inputs and environment
 

@@ -59,6 +59,7 @@ def main():
         models.append(PACKAGE / "number_model.joblib")
     if is_generalized:
         models.append(PACKAGE / "generalized_model.joblib")
+        models.append(PACKAGE / "generalized_seed_model.joblib")
     required=[PACKAGE / "README.md",PACKAGE / "requirements.txt",*models,doc,matching,candidates]
     for path in source_files+required:
         if not path.is_file():

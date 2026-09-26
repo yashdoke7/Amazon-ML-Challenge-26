@@ -87,6 +87,7 @@ def main():
                     target_name_index[row["entity_id"]] = index
         print("scanned source", source, "indic_records", indic_records,
               "distinct_names", len(names), "seconds", round(time.perf_counter()-started, 1), flush=True)
+    name_count = len(names)
     misses = [(q, target_name_index[t]) for q, t in missed if t in target_name_index]
     assert len(misses) > 1000
     print("field", field, "eligible_misses", len(misses), "loading encoder", flush=True)
@@ -104,6 +105,7 @@ def main():
                                    normalize_embeddings=True)
     if args.exact_gpu:
         del encoder
+        del names, name_to_index
         torch.cuda.empty_cache()
         target_tensor = torch.as_tensor(vectors, device="cuda")
         del vectors
@@ -140,7 +142,7 @@ def main():
     volumes = [sum(ids_per_name[j] for j in row[:50]) for row in neighbors]
     result = {"field": field, "retrieval": "exact_gpu" if args.exact_gpu else "hnsw",
               "all_target_records": indic_records,
-              "all_target_distinct_texts": len(names),
+              "all_target_distinct_texts": name_count,
               "eligible_missing_true_links": len(misses),
               "distinct_missed_queries": len(unique_queries),
               **dict(counts),
