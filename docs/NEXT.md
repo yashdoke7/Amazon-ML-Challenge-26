@@ -14,6 +14,8 @@ The team-reported portal limit is an operational constraint; the **score gap is 
 
 **New score lead:** the 35-feature Unicode/transliteration model trained on the same 20k sample scored **0.90416 vs 0.89272** old on the separate 2k validation sample at development-chosen thresholds, and **0.90831 vs 0.89761** old on all 22,133 development queries after cap/ownership. The gain is largely India and cross-script; US is flat. The known-country test-weighted development score rises **0.88511→0.89977**, but France remains unknown. The first-20k test audit found French links after cap/owner 11,858 versus 9,398 in the uploaded baseline; this is an output difference, not measured accuracy. Top40 lost one true selected link out of 22,133 development queries, changing raw macro only 0.908276→0.908274; top45 recovered none despite 106,709 more candidates. The full public TSV and portal ZIP are now being generated.
 
+The new development gap audit found **5,731 true links missing from broad retrieval** and **8,480 present but rejected**. A simple sibling-record similarity rescue was tried and rejected because F0.5 fell on both development and frozen validation. After the current submission is secured, candidate retrieval is the more independent next score avenue; any new route must beat the current oracle/actual score on held-out groups without exceeding inference time or ZIP size.
+
 ## Do next
 
 | Priority | Work | Decision gate |
