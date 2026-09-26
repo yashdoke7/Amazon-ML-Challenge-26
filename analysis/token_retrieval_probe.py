@@ -409,8 +409,8 @@ if FOCUSED_RERANK:
     out["focused"]["accent_plus_india_overlap_top50"] = focused_metrics("pairs_focused_combined")
     print("focused combined",{x:y for x,y in out["focused"]["accent_plus_india_overlap_top50"].items() if x!="slice_recall"},flush=True)
     if EXPORT_FOCUSED_CANDIDATES:
-        if QUERY_SPLIT == "development" or QUERY_SPLIT == "all" and N != 5000:
-            raise ValueError("Focused export supports the initial 5k all-query sample or validation queries")
+        if QUERY_SPLIT == "all" and N != 5000:
+            raise ValueError("Focused export supports the initial 5k all-query sample or a held-out split")
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "code" / "business_entity_resolution" / "src"))
         from validation import entity_split
         query_splits = pd.DataFrame([(q["entity_id"],entity_split(q["entity_id"])) for q in queries],
@@ -425,7 +425,10 @@ if FOCUSED_RERANK:
             con.register("heldout_targets",pd.DataFrame({"target_id":heldout_targets}))
         heldout_join = "LEFT JOIN heldout_targets h USING(target_id)" if QUERY_SPLIT == "all" else ""
         heldout_filter = "WHERE s.split!='training' OR e.target_id IS NOT NULL OR h.target_id IS NULL" if QUERY_SPLIT == "all" else ""
-        export_path = (OUT.parent / ("full_validation_combined_pairs.parquet" if QUERY_SPLIT=="validation" else "full_combined_pairs.parquet")).as_posix()
+        export_name = {"validation":"full_validation_combined_pairs.parquet",
+                       "development":"full_development_combined_pairs.parquet",
+                       "all":"full_combined_pairs.parquet"}[QUERY_SPLIT]
+        export_path = (OUT.parent / export_name).as_posix()
         con.execute(f"""
             COPY (
               SELECT p.s1_id,p.target_id,s.split,

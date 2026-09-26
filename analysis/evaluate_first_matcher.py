@@ -22,7 +22,8 @@ ERRORS = ROOT / "analysis" / f"first_matcher_{suffix}_errors_results.json"
 MODEL_PATH = ROOT / "analysis" / ("first_matcher_combined_model.joblib" if COMBINED_MODEL else "first_matcher_model.joblib")
 TRAINING_RESULTS = ROOT / "analysis" / ("first_matcher_combined_training_results.json" if COMBINED_MODEL else "first_matcher_results.json")
 N = int(os.environ.get("VALIDATION_QUERY_COUNT", "2000"))
-THRESHOLD = json.loads(TRAINING_RESULTS.read_text(encoding="utf-8"))["calibration_threshold"]
+THRESHOLD = float(os.environ.get("EVAL_THRESHOLD",
+    json.loads(TRAINING_RESULTS.read_text(encoding="utf-8"))["calibration_threshold"]))
 
 
 def sampled_truth():
