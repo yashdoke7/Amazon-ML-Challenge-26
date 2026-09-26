@@ -8,6 +8,8 @@ Win the Amazon ML Challenge 2026 business entity resolution task as strongly as 
 
 **Current stage:** extensive data exploration and candidate-retrieval experiments are complete. A frozen Source 1 validation split, score function, and first trained matcher exist. The first model has been evaluated on a 2,000-entity validation sample, but there is no full-validation or leaderboard score yet. The old ignored local `analysis/baseline_pairs.parquet` was a partial candidate extract and must not be used for the current score; the reproducible complete-core extract is `analysis/full_core_pairs.parquet`.
 
+An end-to-end local inference package now exists at `code/business_entity_resolution/`. It builds a DuckDB target index, reproduces the tested candidate routes, scores pairs with the bundled frozen model, and writes both required TSVs. In a 100-query validation equivalence test, the core route produced exactly **19,773/19,773** expected pairs and the combined route exactly **20,809/20,809**; the first 1,000 vectors from each route were bit-identical to the analysis feature function. The bundled model SHA-256 matches the evaluated model. The first 10,000 test S1 were processed by the full run at about 109 seconds per 5,000-query batch and produced 2,047,629 candidates; these are throughput observations, not quality scores. The complete test run and validator remain pending.
+
 ## Facts established from the supplied data
 
 - Training: 2,206,821 S1, 5,034,616 S2, 5,285,603 S3, and 7,638,365 labeled links. Test: 1,732,544 S1 and 9,969,589 S2/S3 targets. Test contains **259,452 France S1**, with no labeled France examples in train.

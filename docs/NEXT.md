@@ -6,15 +6,17 @@ _Updated 26 September 2026. This is the canonical work queue. Read [FINDINGS.md]
 
 The data audit, retrieval probes, miss audit, and deterministic split are complete. The core candidate route reaches 91.18% link recall and a 0.9617 **oracle** macro-F0.5 ceiling on all 22,133 development S1. India-only address-token overlap top-50 and accent-folded core names increase reachable truth. The first LightGBM matcher scored **0.8744 macro F0.5 on 2,000 validation S1** using core candidates, **0.8754** when scoring the combined candidates unchanged, and **0.8730** after retraining on combined candidates. A larger development threshold sweep favored 0.775 for the core-trained model, but that threshold reduced its validation macro F0.5 to 0.8728 on combined candidates. Retain 0.65 as the provisional core-model threshold; India, singleton calibration, and scaling remain the main gaps. The challenge rules and output contract are in [RULES.md](RULES.md).
 
+The final inference package and frozen model are now in `code/business_entity_resolution/`. The full test run is active locally, writing ignored `output/matching_results.tsv` and `output/candidate_pairs.tsv`; its first two 5,000-query batches each took about 109 seconds. Do not start a second full run. Query its current terminal/session or inspect output file row counts before deciding whether to resume. A 100-query regression check exactly reproduced saved core and combined validation candidates.
+
 ## Do next, in order
 
 | Priority | Work and why | Decision gate |
 | --- | --- | --- |
-| 1 | Build and dry-run the complete inference pipeline now. The challenge has less than two days left and 1.73M test queries imply hundreds of millions of candidates. Reuse the measured combined candidate route, score in chunks, and write both required output TSVs. | Small train/validation equivalence check against the saved candidate extract, runtime/memory measurement, exact candidate subset, every S1 row. |
+| 1 | Continue the already-running full test inference. The challenge has less than two days left and 1.73M test queries imply hundreds of millions of candidates. | Monitor progress and disk, then run the supplied validator on both finished TSVs. If interrupted between batches, use `--resume` as documented in the package README. |
 | 2 | Diagnose available-but-rejected true links, false links, and singleton merges. Improve features and hard-negative training using training/development entities; concentrate on India, cross-script names, aliases, shared addresses, and corrupted numbers. | Country/source/noise slices; actual macro F0.5, singleton accuracy, precision/recall. Do not introduce a strict number equality rule. |
 | 3 | Inspect residual true-link misses after the combined route. The ignored `analysis/core_rescue_dev_audit_results.json` covers older core-route misses; refresh it. Test alias splitting, targeted character n-grams, or local transliteration only where the missed groups support them. | Incremental true links, candidate cost, hard-slice gains, and false-collision tails. Record aggregate or anonymized findings in Git. |
 | 4 | Stress-test France and language transfer. France has no labels; inspect candidate volume, accents, and output completeness. Use held-out Indian scripts or controlled transformations for labeled stress tests. | Observable coverage and failures; no unmeasured France or all-language F0.5 claim. |
-| 5 | Run and package full test inference. | Supplied validator; every S1 row, target IDs, candidate subset, pinned dependencies, license, reproducibility, runtime, portal submission. |
+| 5 | Package the finished outputs and methodology template. | Supplied validator; every S1 row, target IDs, candidate subset, pinned dependencies, license, reproducibility, runtime, portal submission. |
 
 ## Decision discipline
 
