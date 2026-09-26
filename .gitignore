@@ -5,6 +5,8 @@ tmp/
 # Generated predictions and submission bundles.
 output/*.tsv
 output/*.zip
+output/*.log
+output/*.json
 *.parquet
 *.feather
 *.arrow
