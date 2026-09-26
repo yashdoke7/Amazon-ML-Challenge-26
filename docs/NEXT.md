@@ -8,15 +8,17 @@ The data audit, retrieval probes, miss audit, and deterministic split are comple
 
 The final inference package and frozen model are now in `code/business_entity_resolution/`. The full test run is active locally, writing ignored `output/matching_results.tsv` and `output/candidate_pairs.tsv`; its first two 5,000-query batches each took about 109 seconds. Do not start a second full run. Query its current terminal/session or inspect output file row counts before deciding whether to resume. A 100-query regression check exactly reproduced saved core and combined validation candidates.
 
+The first 20,000 test rows exposed a French generic-name collision tail. After the full run, preserve `matching_results.tsv` as `matching_results_uncapped.tsv` and run `src/cap_predictions.py` to select the top 11 model-scored predictions per query. Full training labels have maximum group size 11; no sampled validation row is changed by the cap. France has no labels, so describe this as a transfer-risk mitigation, not a measured score gain.
+
 ## Do next, in order
 
 | Priority | Work and why | Decision gate |
 | --- | --- | --- |
-| 1 | Continue the already-running full test inference. The challenge has less than two days left and 1.73M test queries imply hundreds of millions of candidates. | Monitor progress and disk, then run the supplied validator on both finished TSVs. If interrupted between batches, use `--resume` as documented in the package README. |
+| 1 | Continue the already-running full test inference. The challenge has less than two days left and 1.73M test queries imply hundreds of millions of candidates. | Monitor progress and disk. If interrupted between batches, use `--resume` as documented in the package README. |
 | 2 | Diagnose available-but-rejected true links, false links, and singleton merges. Improve features and hard-negative training using training/development entities; concentrate on India, cross-script names, aliases, shared addresses, and corrupted numbers. | Country/source/noise slices; actual macro F0.5, singleton accuracy, precision/recall. Do not introduce a strict number equality rule. |
 | 3 | Inspect residual true-link misses after the combined route. The ignored `analysis/core_rescue_dev_audit_results.json` covers older core-route misses; refresh it. Test alias splitting, targeted character n-grams, or local transliteration only where the missed groups support them. | Incremental true links, candidate cost, hard-slice gains, and false-collision tails. Record aggregate or anonymized findings in Git. |
 | 4 | Stress-test France and language transfer. France has no labels; inspect candidate volume, accents, and output completeness. Use held-out Indian scripts or controlled transformations for labeled stress tests. | Observable coverage and failures; no unmeasured France or all-language F0.5 claim. |
-| 5 | Package the finished outputs and methodology template. | Supplied validator; every S1 row, target IDs, candidate subset, pinned dependencies, license, reproducibility, runtime, portal submission. |
+| 5 | Apply the top-11 postprocessor, validate both finished TSVs, and package them with the methodology template. | Supplied validator; every S1 row, target IDs, candidate subset, pinned dependencies, license, reproducibility, runtime, portal submission. |
 
 ## Decision discipline
 
