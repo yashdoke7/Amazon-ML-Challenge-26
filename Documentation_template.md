@@ -1,12 +1,12 @@
 # ML Challenge 2026: Business Entity Resolution Solution
 
-**Team Name:** [Registered team name]  
-**Team Members:** [Registered member names]  
+**Team Name:** Vulcans
+**Team Members:** Yash Kailas Doke, Harsh Jitendra Jain, Ayush Tiwari, Vedant Kaulgekar
 **Submission Date:** 27 September 2026
 
 ## 1. Executive Summary
 
-We resolve each deduplicated Source 1 business to zero or more Source 2/3 records using a country-aware candidate union and a locally trained LightGBM pair classifier. Separate name and address retrieval quotas protect records with missing fields, aliases, Indian script changes, and French accents. A bounded final group-size pass addresses generic-name collisions observed in unlabeled French test records.
+We resolve each deduplicated Source 1 business to zero or more Source 2/3 records using a country-aware candidate union and a locally trained LightGBM pair classifier. Separate name and address retrieval quotas protect records with missing fields, aliases, Indian script changes, and French accents. Final group-size and single-owner passes address generic-name collisions and competing assignments.
 
 ## 2. Methodology
 
@@ -33,13 +33,13 @@ We trained a LightGBM 4.5.0 classifier (MIT license, locally generated weights, 
 
 The 23 local features cover Unicode-normalized name and address ratios, token-sort and token-set similarity, accent-folded core-name similarity, exact-name indicators, token intersection and containment, address-number overlap/disagreement, field lengths, missing address, and Source 3 indicator. The frozen threshold is 0.65, selected through the internal training calibration; a later 2,000-development-query threshold sweep favored 0.775 but failed to improve the unchanged validation sample, so we retained 0.65.
 
-The output pass limits each predicted group to its 11 highest pair probabilities. This bound is the maximum true group size across all 2.2 million training Source 1 rows; it did not change any of the fixed 2,000 validation predictions. It is a conservative response to unlabeled French generic names that otherwise attract hundreds of model-selected records at different streets. French quality is not directly measurable.
+The output pass limits each predicted group to its 11 highest pair probabilities. This bound is the maximum true group size across all 2.2 million training Source 1 rows; it did not change any of the fixed 2,000 validation predictions. It is a conservative response to unlabeled French generic names that otherwise attract hundreds of model-selected records at different streets. Finally, each target is assigned to at most one Source 1, choosing the highest model score when predictions compete. Every target had exactly one true owner in the supplied training labels. French quality is not directly measurable.
 
 ## 5. Results and Error Analysis
 
 With combined candidates and the frozen core-trained model at threshold 0.65, the fixed 2,000-query validation sample scored **0.8754 macro F0.5**, with 5,521 true positive links, 306 false positive links, 1,374 missed true links, and 74.8% singleton accuracy on 103 true singletons. US macro F0.5 was approximately 0.906 and India approximately 0.827 in the earlier core-candidate run; these are local sample results, not leaderboard scores. The alternative combined-trained model scored 0.8730 on the same sample. No French labeled F0.5 is available.
 
-On the complete 22,133-query development partition, the same combined candidate route and frozen matcher achieved **0.87927 macro F0.5 after the group cap** (0.87926 before), with 61,321 true positive links, 3,364 false positive links after the cap, and 15,151 missed true links. The US score was 0.90971 and India 0.83337. These development figures informed diagnosis and are not an independent leaderboard estimate.
+On the complete 22,133-query development partition, the same combined candidate route and frozen matcher achieved **0.87984 macro F0.5 after the group cap and exclusive-owner pass** (0.87926 before both), with 61,320 true positive links, 3,299 false positive links, and 15,152 missed true links. The US score was 0.91023 and India 0.83400. These development figures informed diagnosis and are not an independent leaderboard estimate.
 
 False positives cluster around nearly identical business names at different units or streets and shared buildings. False negatives involve aliases, Indian script changes, blank/short addresses, number corruption, and positive pairs that never entered the candidate set. Exact house-number disagreement was not used as an automatic rejection because supplied positives also contain number corruption.
 
@@ -49,4 +49,4 @@ The method combines complementary fields and script-tolerant routes while contro
 
 ## Appendix: Code Artifacts
 
-`code/business_entity_resolution/src/build_index.py` builds a local target index, `src/infer.py` generates both output TSVs from the supplied test files and bundled `model.joblib`, and `src/cap_predictions.py` applies the final group bound. `src/train.py` and `src/validation.py` document model reconstruction and the deterministic split. Exact commands and pinned dependencies are in `code/business_entity_resolution/README.md` and `requirements.txt`. We used no external identity lookup, registry, geocoding, or remote model inference.
+`code/business_entity_resolution/src/build_index.py` builds a local target index, `src/infer.py` generates both output TSVs from the supplied test files and bundled `model.joblib`, and `src/cap_predictions.py` plus `src/resolve_exclusivity.py` apply final group decisions. `src/train.py` and `src/validation.py` document model reconstruction and the deterministic split. Exact commands and pinned dependencies are in `code/business_entity_resolution/README.md` and `requirements.txt`. We used no external identity lookup, registry, geocoding, or remote model inference.
