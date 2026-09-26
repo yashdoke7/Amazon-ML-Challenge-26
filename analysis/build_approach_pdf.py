@@ -92,12 +92,12 @@ def main():
           "so France is processed without hard-coded exclusion."),
         H("2. Learned last-stage block, then final matching"),
         P("A frozen 23-feature LightGBM ranks the broad union and passes at most 40 candidates "
-          "per Source 1 to a separate 27-feature final LightGBM. The recorded candidate TSV is "
+          "per Source 1 to a separate 35-feature final LightGBM. The recorded candidate TSV is "
           "exactly this last-stage set. On all 22,133 development queries, it retained "
-          "70,735/70,741 broad-reachable true links and every final selected link. The final model "
-          "was trained on 3.95 million pairs from 20,000 training queries; its features include "
-          "name/address similarities, token overlap, source signals, and soft address-number "
-          "agreement. It uses only supplied data, with threshold 0.75 and India override 0.65."),
+          "70,735/70,741 broad-reachable true links, losing one selected true link. The final "
+          "model was trained on 3.95 million pairs from 20,000 queries. It compares original "
+          "Unicode text and local ASCII-transliterated name/address views, plus soft address-number "
+          "agreement. No remote service is used; the global threshold is 0.80."),
         H("3. Resolve group and ownership conflicts"),
         P("Rank selected links by model probability and retain at most 11 per Source 1, the largest "
           "true group in the full training labels. Assign a target predicted by multiple Source 1 "
@@ -125,9 +125,9 @@ def main():
         ["Combined candidate oracle", "22,133 development queries", "0.96793 upper bound"],
         ["Learned top-40 oracle", "22,133 development queries", "0.96788 upper bound"],
         ["Original 23-feature baseline", "Full development, 3 output passes", "0.88331"],
-        ["27-feature model, uniform 0.75", "Full development, cap + owner", "0.89574"],
-        ["27-feature model, India 0.65", "Full development, cap + owner", "0.89761"],
-        ["27-feature model, India 0.65", "Frozen 2,000-query validation", "0.89272"],
+        ["Previous 27-feature model", "Full development, cap + owner", "0.89761"],
+        ["35-feature Unicode model", "Full development, cap + owner", "0.90831"],
+        ["35-feature Unicode model", "Frozen 2,000-query validation", "0.90416"],
     ]
     table = Table(table_data, colWidths=[2.08 * inch, 2.32 * inch, 1.48 * inch], repeatRows=1)
     table.setStyle(TableStyle([
@@ -144,13 +144,14 @@ def main():
         H("What the measurements mean"),
         B("The candidate oracle assumes perfect scoring on retrieved pairs. It measures the "
           "retrieval ceiling, not an achieved model score."),
-        B("The learned top-40 block was chosen for the portal's 512 MB ZIP limit. "
-          "Unlike a lexical top-40 quota, it preserved all final selected development links."),
-        B("The India override improved frozen validation from 0.89091 to 0.89272 and full "
-          "development from 0.89574 to 0.89761; it also added false links and reduced "
-          "singleton accuracy. The challenge metric favored it on both checks."),
-        B("France has no truth labels. In a 20,000-query test slice, a generic-name collision "
-          "tail remained after scoring, so the top-11 cap is retained. No French F0.5 is claimed."),
+        B("The learned top-40 block controls the final ZIP size. It lost one selected true "
+          "link across 22,133 development queries; raising the cutoff to 45 recovered no "
+          "additional selection and added 106,709 candidates."),
+        B("The Unicode-aware model improved frozen validation from 0.89272 to 0.90416 and "
+          "full development from 0.89761 to 0.90831. India gained most; US was nearly "
+          "unchanged. The test mix has more India, but French quality is still unmeasured."),
+        B("France has no truth labels. In a 20,000-query test slice, generic-name collisions "
+          "remained before capping. The top-11 cap was retained; no French F0.5 is claimed."),
         H("Reproducibility and fair play"),
         P("The final ZIP contains the exact last-stage candidate TSV, matching TSV, runnable "
           "Python source, both locally trained model weights, pinned dependencies, and the full "

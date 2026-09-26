@@ -21,8 +21,11 @@ from model_features import extractor_for
 def featurize_rows(rows, model_feature_names):
     from features import FEATURE_NAMES, pair_features
     from number_features import NUMBER_FEATURE_NAMES, number_pair_features
-    feature_function=pair_features if model_feature_names==FEATURE_NAMES else number_pair_features
-    assert model_feature_names in (FEATURE_NAMES,NUMBER_FEATURE_NAMES)
+    from generalized_features import GENERALIZED_FEATURE_NAMES, generalized_pair_features
+    functions = {tuple(FEATURE_NAMES): pair_features,
+                 tuple(NUMBER_FEATURE_NAMES): number_pair_features,
+                 tuple(GENERALIZED_FEATURE_NAMES): generalized_pair_features}
+    feature_function = functions[tuple(model_feature_names)]
     features=np.empty((len(rows),len(model_feature_names)),dtype=np.float32)
     for i,(q_name,t_name,q_address,t_address,source) in enumerate(rows):
         features[i]=feature_function(q_name,t_name,q_address,t_address,source)

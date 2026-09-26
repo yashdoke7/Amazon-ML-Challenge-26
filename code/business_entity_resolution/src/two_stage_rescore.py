@@ -20,12 +20,12 @@ import numpy as np
 import pandas as pd
 
 from features import FEATURE_NAMES
-from number_features import NUMBER_FEATURE_NAMES
+from model_features import extractor_for
 from rescore_candidates import featurize_rows
 
 
 def process_batch(con, blocker, matcher, rows, candidate_writer, match_writer,
-                  pool, top_k, thresholds):
+                  pool, top_k, thresholds, default_threshold, model_feature_names):
     queries = {q["entity_id"]: q for q, _ in rows}
     pairs = [(q["entity_id"], target) for q, ids in rows for target in ids]
     retained = {q["entity_id"]: [] for q, _ in rows}
@@ -47,17 +47,20 @@ def process_batch(con, blocker, matcher, rows, candidate_writer, match_writer,
                                  row.source))
         chunks = (feature_rows[i:i+50_000] for i in range(0, len(feature_rows), 50_000))
         features = np.concatenate(list(pool.map(
-            partial(featurize_rows, model_feature_names=NUMBER_FEATURE_NAMES), chunks)))
+            partial(featurize_rows, model_feature_names=model_feature_names), chunks)))
         blocker_probs = blocker.predict_proba(features[:, :len(FEATURE_NAMES)])[:, 1]
-        final_probs = matcher.predict_proba(features)[:, 1]
         frame["blocker_prob"] = blocker_probs
-        frame["final_prob"] = final_probs
+        frame["feature_index"] = np.arange(len(frame))
         frame = frame.sort_values(["s1_id", "blocker_prob", "target_id"],
                                   ascending=[True, False, True], kind="stable")
-        frame = frame.loc[frame.groupby("s1_id", sort=False).cumcount() < top_k]
+        frame = frame.loc[frame.groupby("s1_id", sort=False).cumcount() < top_k].copy()
+        # The retained rows are the exact last-stage candidates passed to the
+        # final matcher and reported in the submission artifact.
+        frame["final_prob"] = matcher.predict_proba(
+            features[frame["feature_index"].to_numpy()])[:, 1]
         for row in frame.itertuples(index=False):
             retained[row.s1_id].append(row.target_id)
-            threshold = thresholds.get(queries[row.s1_id]["country"], 0.75)
+            threshold = thresholds.get(queries[row.s1_id]["country"], default_threshold)
             if row.final_prob >= threshold:
                 predictions[row.s1_id].append(row.target_id)
     for q, _ in rows:
@@ -68,7 +71,8 @@ def process_batch(con, blocker, matcher, rows, candidate_writer, match_writer,
 
 
 def run(data_dir, db_path, broad_path, candidate_path, matching_path,
-        top_k, workers, batch_size, maximum, thresholds):
+        top_k, workers, batch_size, maximum, thresholds, default_threshold,
+        matcher_path, wanted):
     if len({broad_path.resolve(), candidate_path.resolve(), matching_path.resolve()}) != 3:
         raise ValueError("Input and output paths must be distinct")
     if top_k < 1 or workers < 1 or batch_size < 1:
@@ -80,8 +84,9 @@ def run(data_dir, db_path, broad_path, candidate_path, matching_path,
     con.execute("SET threads=8")
     package = Path(__file__).resolve().parents[1]
     blocker = joblib.load(package / "model.joblib")
-    matcher = joblib.load(package / "number_model.joblib")
-    if list(blocker.feature_name_) != FEATURE_NAMES or list(matcher.feature_name_) != NUMBER_FEATURE_NAMES:
+    matcher = joblib.load(matcher_path or package / "number_model.joblib")
+    model_feature_names, _ = extractor_for(matcher)
+    if list(blocker.feature_name_) != FEATURE_NAMES or model_feature_names[:len(FEATURE_NAMES)] != FEATURE_NAMES:
         raise ValueError("Unexpected bundled model feature contract")
     started = time.perf_counter()
     total_queries = broad_pairs = final_pairs = matches = 0
@@ -92,6 +97,8 @@ def run(data_dir, db_path, broad_path, candidate_path, matching_path,
          candidate_path.open("w", encoding="utf-8", newline="") as candidate_stream, \
          matching_path.open("w", encoding="utf-8", newline="") as match_stream:
         queries = csv.DictReader(query_stream, delimiter="\t")
+        if wanted is not None:
+            queries = (query for query in queries if query["entity_id"] in wanted)
         broad = csv.DictReader(broad_stream, delimiter="\t")
         if broad.fieldnames != ["source1_entity_id", "candidate_entity_ids"]:
             raise ValueError("Unexpected broad candidate header")
@@ -112,7 +119,7 @@ def run(data_dir, db_path, broad_path, candidate_path, matching_path,
             if len(batch) >= batch_size:
                 n_broad, n_final, n_match = process_batch(
                     con, blocker, matcher, batch, candidate_writer, match_writer,
-                    pool, top_k, thresholds)
+                    pool, top_k, thresholds, default_threshold, model_feature_names)
                 total_queries += len(batch)
                 broad_pairs += n_broad
                 final_pairs += n_final
@@ -128,7 +135,7 @@ def run(data_dir, db_path, broad_path, candidate_path, matching_path,
         if batch:
             n_broad, n_final, n_match = process_batch(
                 con, blocker, matcher, batch, candidate_writer, match_writer,
-                pool, top_k, thresholds)
+                pool, top_k, thresholds, default_threshold, model_feature_names)
             total_queries += len(batch)
             broad_pairs += n_broad
             final_pairs += n_final
@@ -150,6 +157,9 @@ if __name__ == "__main__":
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--batch-size", type=int, default=5000)
     parser.add_argument("--max-queries", type=int)
+    parser.add_argument("--query-ids", type=Path)
+    parser.add_argument("--matcher-model", type=Path)
+    parser.add_argument("--threshold", type=float, default=0.75)
     parser.add_argument("--country-threshold", action="append", default=[], metavar="COUNTRY:VALUE")
     args = parser.parse_args()
     thresholds = {}
@@ -158,4 +168,6 @@ if __name__ == "__main__":
         thresholds[country] = float(threshold)
     run(args.data_dir, args.db, args.broad_candidate, args.candidate,
         args.matching, args.top_k, args.workers, args.batch_size,
-        args.max_queries, thresholds)
+        args.max_queries, thresholds, args.threshold, args.matcher_model,
+        set(args.query_ids.read_text(encoding="utf-8").splitlines())
+        if args.query_ids else None)

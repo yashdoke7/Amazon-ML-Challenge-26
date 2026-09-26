@@ -15,6 +15,7 @@ import pandas as pd
 from features import FEATURE_NAMES, pair_features
 from infer import candidates
 from number_features import NUMBER_FEATURE_NAMES, number_pair_features
+from generalized_features import GENERALIZED_FEATURE_NAMES, generalized_pair_features
 from validation import entity_split
 
 
@@ -37,7 +38,8 @@ def sample_truth(data_dir, count=5000):
     return {s1:set(ids) for s1,ids in sample},heldout_targets
 
 
-def fit(data_dir, db_path, output_path, query_batch_size, sample_size, use_number_features=False):
+def fit(data_dir, db_path, output_path, query_batch_size, sample_size,
+        use_number_features=False, use_generalized_features=False):
     tic = time.perf_counter()
     truth,heldout = sample_truth(data_dir,count=sample_size)
     queries = []
@@ -60,8 +62,12 @@ def fit(data_dir, db_path, output_path, query_batch_size, sample_size, use_numbe
     df["is_match"] = [target in truth[s1] for s1,target in zip(df.s1_id,df.target_id)]
     df = df.loc[~((df.split=="training") & ~df.is_match & df.target_id.isin(heldout))].reset_index(drop=True)
     print("training pool",len(df),"pairs",int(df.is_match.sum()),"positives",flush=True)
-    feature_names = NUMBER_FEATURE_NAMES if use_number_features else FEATURE_NAMES
-    feature_function = number_pair_features if use_number_features else pair_features
+    if use_generalized_features:
+        feature_names, feature_function = GENERALIZED_FEATURE_NAMES, generalized_pair_features
+    elif use_number_features:
+        feature_names, feature_function = NUMBER_FEATURE_NAMES, number_pair_features
+    else:
+        feature_names, feature_function = FEATURE_NAMES, pair_features
     features = np.empty((len(df),len(feature_names)),dtype=np.float32)
     for i,row in enumerate(df.itertuples(index=False)):
         features[i] = feature_function(row.q_name,row.t_name,row.q_address,row.t_address,row.target_source)
@@ -73,7 +79,7 @@ def fit(data_dir, db_path, output_path, query_batch_size, sample_size, use_numbe
     cal_mask = ((df.split=="training").to_numpy() & internal_cal) | (df.split=="development").to_numpy()
     model = lgb.LGBMClassifier(n_estimators=500,learning_rate=0.05,num_leaves=31,
         min_child_samples=50,colsample_bytree=0.9,reg_lambda=2.0,
-        n_jobs=4 if use_number_features else 8,
+        n_jobs=4 if use_number_features or use_generalized_features else 8,
         verbosity=-1,random_state=20260925)
     model.fit(features[fit_mask],labels[fit_mask],feature_name=feature_names,
         eval_set=[(features[cal_mask],labels[cal_mask])],eval_metric="binary_logloss",
@@ -92,5 +98,9 @@ if __name__=="__main__":
     parser.add_argument("--query-batch-size",type=int,default=1000)
     parser.add_argument("--sample-size",type=int,default=5000)
     parser.add_argument("--number-features",action="store_true")
+    parser.add_argument("--generalized-features",action="store_true")
     args=parser.parse_args()
-    fit(args.data_dir,args.db,args.model_out,args.query_batch_size,args.sample_size,args.number_features)
+    if args.number_features and args.generalized_features:
+        parser.error("Choose only one feature variant")
+    fit(args.data_dir,args.db,args.model_out,args.query_batch_size,args.sample_size,
+        args.number_features,args.generalized_features)

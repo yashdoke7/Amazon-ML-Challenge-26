@@ -19,6 +19,7 @@ output/*.json
 
 # Exploratory raw-record extracts can be regenerated from the supplied TSVs.
 analysis/*_results.json
+analysis/*.log
 
 # Environments, caches, credentials.
 .env

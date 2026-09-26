@@ -2,6 +2,26 @@
 
 This package generates both required test TSVs using the supplied data and a bundled LightGBM matcher. The model in `model.joblib` was trained locally on the supplied training TSVs. It uses 23 local string/number/source features; it makes no network calls. LightGBM 4.5.0 is MIT licensed. See `src/train.py` to regenerate model weights from the supplied training set.
 
+## Final selected Unicode-aware compact variant
+
+The final tested variant uses `model.joblib` only as a learned top-40 candidate ranker. The separate `generalized_model.joblib` is the 35-feature final matcher, trained locally on 20,000 seeded training queries. Its added features compare local ASCII-transliterated name/address views while preserving the original text features. `anyascii==0.3.3` is pinned and used only on this machine; there is no external identity lookup or remote model call. The final threshold is 0.80 for every country. The cap of 11 and exclusive-owner pass follow matching.
+
+From `student_resource/`, the exact end-to-end reconstruction is:
+
+```powershell
+python -m pip install -r code/business_entity_resolution/requirements.txt
+python code/business_entity_resolution/src/build_index.py --data-dir dataset/test --db test_index.duckdb
+python code/business_entity_resolution/src/infer.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/model.joblib --output-dir output --batch-size 5000 --threshold 0.65
+Move-Item output/candidate_pairs.tsv output/broad_candidate_pairs.tsv
+python code/business_entity_resolution/src/two_stage_rescore.py --data-dir dataset/test --db test_index.duckdb --broad-candidate output/broad_candidate_pairs.tsv --candidate output/candidate_pairs.tsv --matching output/generalized_raw.tsv --matcher-model code/business_entity_resolution/generalized_model.joblib --threshold 0.8 --top-k 40 --workers 4
+python code/business_entity_resolution/src/cap_predictions.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/generalized_raw.tsv --output output/generalized_capped.tsv --cap 11
+python code/business_entity_resolution/src/resolve_exclusivity.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/generalized_capped.tsv --output output/matching_results.tsv
+python code/business_entity_resolution/src/stream_validate.py --matching output/matching_results.tsv --candidate output/candidate_pairs.tsv --test-dir dataset/test
+python utils/validate_submission.py --matching output/matching_results.tsv --candidate output/__no_candidates__.tsv --test-dir dataset/test --check-ids
+```
+
+The broad lexical intermediate can be regenerated; only the top-40 set actually passed to the final matcher is submitted as `output/candidate_pairs.tsv`. The supplied validator's candidate check exceeds 32 GB RAM at full scale, so `stream_validate.py` checks every row and the candidate subset relation in bounded memory, while the supplied validator checks match ID existence. `src/train.py --sample-size 20000 --generalized-features` can rebuild the final model from an indexed training set; the bundled weights reproduce the submitted inference exactly. The methodology in `Documentation_template.md` records the measured development/validation comparisons and the French uncertainty.
+
 ## Inputs and environment
 
 Expected layout, relative to `student_resource/`:
