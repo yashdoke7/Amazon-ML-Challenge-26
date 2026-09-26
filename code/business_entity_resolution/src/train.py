@@ -36,9 +36,9 @@ def sample_truth(data_dir, count=5000):
     return {s1:set(ids) for s1,ids in sample},heldout_targets
 
 
-def fit(data_dir, db_path, output_path, query_batch_size):
+def fit(data_dir, db_path, output_path, query_batch_size, sample_size):
     tic = time.perf_counter()
-    truth,heldout = sample_truth(data_dir)
+    truth,heldout = sample_truth(data_dir,count=sample_size)
     queries = []
     with (data_dir / "train_source1.tsv").open(encoding="utf-8",newline="") as stream:
         for row in csv.DictReader(stream,delimiter="\t"):
@@ -86,5 +86,6 @@ if __name__=="__main__":
     parser.add_argument("--db",type=Path,required=True)
     parser.add_argument("--model-out",type=Path,required=True)
     parser.add_argument("--query-batch-size",type=int,default=1000)
+    parser.add_argument("--sample-size",type=int,default=5000)
     args=parser.parse_args()
-    fit(args.data_dir,args.db,args.model_out,args.query_batch_size)
+    fit(args.data_dir,args.db,args.model_out,args.query_batch_size,args.sample_size)

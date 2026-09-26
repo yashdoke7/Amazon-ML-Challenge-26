@@ -15,6 +15,8 @@ from train_first_matcher import DATA, FEATURE_NAMES, ROOT, entity_split, pair_fe
 N = int(os.environ.get("DEVELOPMENT_QUERY_COUNT", "2000"))
 PAIRS = ROOT / "analysis" / "full_development_combined_pairs.parquet"
 OUT = ROOT / "analysis" / "development_calibration_results.json"
+if os.environ.get("CALIBRATION_OUTPUT"):
+    OUT = ROOT / "analysis" / os.environ["CALIBRATION_OUTPUT"]
 
 
 def sampled_truth():
@@ -52,8 +54,11 @@ def main():
     thresholds=sorted(set(float(round(x,3)) for x in np.arange(0.3,0.976,0.025)) | {0.98,0.99,0.995})
     out={"development_queries":len(ids),"candidate_pairs":len(df),"candidate_true_pairs":int(df.is_match.sum()),
          "thresholds":thresholds,"models":{}}
-    for label,path in (("core","first_matcher_model.joblib"),
-                       ("combined","first_matcher_combined_model.joblib")):
+    specs=[("core","first_matcher_model.joblib"),
+           ("combined","first_matcher_combined_model.joblib")]
+    if os.environ.get("EXTRA_MODEL"):
+        specs.append(("expanded",os.environ["EXTRA_MODEL"]))
+    for label,path in specs:
         model=joblib.load(ROOT/"analysis"/path)
         assert list(model.feature_name_)==FEATURE_NAMES
         probabilities=model.predict_proba(features)[:,1]

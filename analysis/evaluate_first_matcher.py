@@ -17,9 +17,12 @@ COMBINED = os.environ.get("EVAL_COMBINED") == "1"
 COMBINED_MODEL = os.environ.get("EVAL_COMBINED_MODEL") == "1"
 PAIRS = ROOT / "analysis" / ("full_validation_combined_pairs.parquet" if COMBINED else "full_validation_pairs.parquet")
 suffix = "combined_retrained" if COMBINED and COMBINED_MODEL else "combined" if COMBINED else "large"
+suffix = os.environ.get("EVAL_TAG",suffix)
 METRICS = ROOT / "analysis" / f"first_matcher_{suffix}_validation_results.json"
 ERRORS = ROOT / "analysis" / f"first_matcher_{suffix}_errors_results.json"
 MODEL_PATH = ROOT / "analysis" / ("first_matcher_combined_model.joblib" if COMBINED_MODEL else "first_matcher_model.joblib")
+if os.environ.get("EVAL_MODEL_PATH"):
+    MODEL_PATH = ROOT / "analysis" / os.environ["EVAL_MODEL_PATH"]
 TRAINING_RESULTS = ROOT / "analysis" / ("first_matcher_combined_training_results.json" if COMBINED_MODEL else "first_matcher_results.json")
 N = int(os.environ.get("VALIDATION_QUERY_COUNT", "2000"))
 THRESHOLD = float(os.environ.get("EVAL_THRESHOLD",

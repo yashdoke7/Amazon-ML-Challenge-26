@@ -10,12 +10,14 @@ The final inference package and frozen model are now in `code/business_entity_re
 
 The first 20,000 test rows exposed a French generic-name collision tail. After the full run, preserve `matching_results.tsv` as `matching_results_uncapped.tsv` and run `src/cap_predictions.py` to select the top 11 model-scored predictions per query. Full training labels have maximum group size 11; no sampled validation row is changed by the cap. France has no labels, so describe this as a transfer-risk mitigation, not a measured score gain.
 
+Full development inference is complete: 22,133 queries, 4,743,229 candidates, **0.87926 macro F0.5** with the frozen 0.65 model, US 0.90971, India 0.83334, oracle ceiling 0.96793. The cap changes four development groups, removes 10 false links and no true links. A 20,000-query larger training sample is now running as a focused matcher test. Do not substitute its model into the full test run without a frozen validation comparison and a feasible rescoring plan.
+
 ## Do next, in order
 
 | Priority | Work and why | Decision gate |
 | --- | --- | --- |
 | 1 | Continue the already-running full test inference. The challenge has less than two days left and 1.73M test queries imply hundreds of millions of candidates. | Monitor progress and disk. If interrupted between batches, use `--resume` as documented in the package README. |
-| 2 | Diagnose available-but-rejected true links, false links, and singleton merges. Improve features and hard-negative training using training/development entities; concentrate on India, cross-script names, aliases, shared addresses, and corrupted numbers. | Country/source/noise slices; actual macro F0.5, singleton accuracy, precision/recall. Do not introduce a strict number equality rule. |
+| 2 | Finish the already-running 20,000-training-query model, then score it on the frozen 2,000 validation queries and development subset at a development-selected threshold. If it improves enough to justify the cost, rescore the saved test candidates after current inference; never rerun candidate retrieval unnecessarily. | Compare actual macro F0.5, India/US, singleton, pair precision/recall. Keep old model available. |
 | 3 | Inspect residual true-link misses after the combined route. The ignored `analysis/core_rescue_dev_audit_results.json` covers older core-route misses; refresh it. Test alias splitting, targeted character n-grams, or local transliteration only where the missed groups support them. | Incremental true links, candidate cost, hard-slice gains, and false-collision tails. Record aggregate or anonymized findings in Git. |
 | 4 | Stress-test France and language transfer. France has no labels; inspect candidate volume, accents, and output completeness. Use held-out Indian scripts or controlled transformations for labeled stress tests. | Observable coverage and failures; no unmeasured France or all-language F0.5 claim. |
 | 5 | Apply the top-11 postprocessor, validate both finished TSVs, and package them with the methodology template. | Supplied validator; every S1 row, target IDs, candidate subset, pinned dependencies, license, reproducibility, runtime, portal submission. |

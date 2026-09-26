@@ -39,6 +39,8 @@ The output pass limits each predicted group to its 11 highest pair probabilities
 
 With combined candidates and the frozen core-trained model at threshold 0.65, the fixed 2,000-query validation sample scored **0.8754 macro F0.5**, with 5,521 true positive links, 306 false positive links, 1,374 missed true links, and 74.8% singleton accuracy on 103 true singletons. US macro F0.5 was approximately 0.906 and India approximately 0.827 in the earlier core-candidate run; these are local sample results, not leaderboard scores. The alternative combined-trained model scored 0.8730 on the same sample. No French labeled F0.5 is available.
 
+On the complete 22,133-query development partition, the same combined candidate route and frozen matcher achieved **0.87927 macro F0.5 after the group cap** (0.87926 before), with 61,321 true positive links, 3,364 false positive links after the cap, and 15,151 missed true links. The US score was 0.90971 and India 0.83337. These development figures informed diagnosis and are not an independent leaderboard estimate.
+
 False positives cluster around nearly identical business names at different units or streets and shared buildings. False negatives involve aliases, Indian script changes, blank/short addresses, number corruption, and positive pairs that never entered the candidate set. Exact house-number disagreement was not used as an automatic rejection because supplied positives also contain number corruption.
 
 ## 6. Conclusion
