@@ -28,6 +28,8 @@ An India-only 0.65 threshold (all other countries 0.75) was selected on separate
 
 Separate baseline and 27-feature archive paths are prepared in `analysis/package_submission.py`, and the variant methodology is `docs/Documentation_number_model.md`. Both methodology files retain a candidate-count placeholder until the full output is verified. The packager validates the complete TSV contract before writing either ZIP. The leaderboard accepts `matching_results.tsv` separately; the private final archive includes both output files and runnable code.
 
+The separate 2-page Unstop approach document has a reproducible builder at `analysis/build_approach_pdf.py` and local output `output/pdf/Vulcans_approach_summary.pdf`. It was rendered and checked as two A4 pages. Refresh any final model/public-score wording before portal upload; the ZIP's full methodology remains a separate required file.
+
 ## Do next, in order
 
 | Priority | Work and why | Decision gate |
