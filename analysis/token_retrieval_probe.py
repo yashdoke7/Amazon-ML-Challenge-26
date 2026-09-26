@@ -1,7 +1,8 @@
-"""Probe rare-token blocking against all train S2/S3 records.
+"""Probe candidate blocking against all train S2/S3 records.
 
-Uses 5,000 seeded S1 queries. Builds only target postings whose tokens occur in
-those queries. This is a feasibility/retrieval test, not the final blocker.
+Uses a seeded S1 sample (or the full development partition). Builds only target
+postings whose tokens occur in those queries. This is a retrieval feasibility
+test, not the final blocker or a trained matcher.
 """
 import csv
 import json
@@ -25,7 +26,9 @@ if QUERY_SPLIT not in ("all", "development"):
 if QUERY_SPLIT == "development":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "code" / "business_entity_resolution" / "src"))
     from validation import entity_split
-OUT = Path(__file__).resolve().parent / ("token_retrieval_dev_results.json" if QUERY_SPLIT=="development" else "token_retrieval_results.json")
+FOCUSED_RERANK = os.environ.get("FOCUSED_RERANK") == "1"
+OUT = Path(__file__).resolve().parent / ("token_retrieval_focused_results.json" if FOCUSED_RERANK else
+    "token_retrieval_dev_results.json" if QUERY_SPLIT=="development" else "token_retrieval_results.json")
 RNG = random.Random(20260925)
 N = int(os.environ.get("QUERY_COUNT", "5000"))
 sample = []
@@ -220,7 +223,6 @@ for k in (20,50,100):
     out["prerank"][f"name_or_address_top{k}"] = {"candidate_pairs": n_pairs,"true_pairs": len(hits),
        "edge_recall": len(hits)/len(edges),"slice_recall": {cat: recovered[cat]/totals[cat] for cat in totals}}
     print("name_or_address_top",k,"candidates",n_pairs,"true",len(hits),"recall",round(len(hits)/len(edges),4),flush=True)
-out["total_seconds"] = round(time.perf_counter()-start_all,1)
 high_hits = set(con.execute("""
     SELECT p.s1_id,p.target_id FROM pairs_token_high_union p
     JOIN truth_edges e USING (s1_id,target_id)
@@ -300,6 +302,63 @@ for label,expr in (("compact",compact_expr),("core",core_expr)):
     out["rescue"][label]["candidate_count_quantiles"] = {k:counts[int(p*(len(counts)-1))]
         for k,p in (("median",.5),("p90",.9),("p99",.99),("max",1.0))}
     print("rescue",label,out["rescue"][label],flush=True)
+if FOCUSED_RERANK:
+    def focused_metrics(table):
+        n = con.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+        hits = set(con.execute(f"SELECT p.s1_id,p.target_id FROM {table} p JOIN truth_edges e USING(s1_id,target_id)").fetchall())
+        totals,recovered = {},{}
+        for pair,categories in truth_slices.items():
+            for category in categories:
+                totals[category] = totals.get(category,0)+1
+                recovered[category] = recovered.get(category,0)+(pair in hits)
+        return {"candidate_pairs":n,"true_pairs":len(hits),"edge_recall":len(hits)/len(edges),
+                "complete_set_recall_nonempty":complete_set_recall(hits),
+                "oracle_macro_f05_ceiling":oracle_macro_f05(hits),
+                "slice_recall":{cat:{"n":totals[cat],"recall":recovered[cat]/totals[cat]} for cat in totals}}
+    accent_core = f"strip_accents({core_expr})"
+    con.execute(f"""
+        CREATE TEMP TABLE pairs_accent_core AS
+        WITH q AS (SELECT entity_id s1_id,country,{accent_core} norm_key FROM queries),
+             t AS (SELECT entity_id target_id,country,{accent_core} norm_key FROM ({targets}))
+        SELECT q.s1_id,t.target_id FROM q JOIN t USING(country,norm_key) WHERE q.norm_key!=''
+    """)
+    con.execute("CREATE TEMP TABLE pairs_accent_rescued AS SELECT * FROM pairs_rescued_core UNION SELECT * FROM pairs_accent_core")
+    out["focused"] = {"accent_core":focused_metrics("pairs_accent_rescued")}
+    print("focused accent",{k:v for k,v in out["focused"]["accent_core"].items() if k!="slice_recall"},flush=True)
+    addr_tokens = r"list_distinct(list_filter(string_split(trim(regexp_replace(lower(coalesce(business_address,'')), '[^\p{L}\p{M}\p{N}]+', ' ', 'g')), ' '), x -> length(x)>=2))"
+    con.execute(f"CREATE TEMP TABLE q_addr_lists AS SELECT entity_id s1_id,{addr_tokens} q_tokens FROM queries WHERE country='India'")
+    con.execute(f"""
+        CREATE TEMP TABLE address_overlap_ranked AS
+        WITH target_rows AS (
+          SELECT r.s1_id,r.target_id,r.ads,q.q_tokens,
+                 {addr_tokens} t_tokens
+          FROM ranked_high r JOIN q_addr_lists q USING(s1_id)
+          JOIN ({targets}) t ON r.target_id=t.entity_id
+        ), scored AS (
+          SELECT s1_id,target_id,ads,
+            len(list_intersect(q_tokens,t_tokens)) overlap,
+            len(q_tokens) q_len,len(t_tokens) t_len
+          FROM target_rows
+        )
+        SELECT s1_id,target_id,overlap,q_len,t_len,
+          row_number() OVER (PARTITION BY s1_id
+            ORDER BY overlap/greatest(1,least(q_len,t_len)) DESC,
+                     overlap DESC,ads DESC,target_id) overlap_rank
+        FROM scored
+    """)
+    for k in (50,100,200):
+        con.execute(f"""
+            CREATE TEMP TABLE pairs_overlap_{k} AS
+            SELECT * FROM pairs_rescued_core
+            UNION SELECT s1_id,target_id FROM address_overlap_ranked
+            WHERE overlap_rank<={k} AND overlap>=2
+        """)
+        out["focused"][f"india_address_overlap_top{k}"] = focused_metrics(f"pairs_overlap_{k}")
+        print("focused overlap",k,{x:y for x,y in out["focused"][f"india_address_overlap_top{k}"].items() if x!="slice_recall"},flush=True)
+    out["total_seconds"] = round(time.perf_counter()-start_all,1)
+    OUT.write_text(json.dumps(out,indent=2),encoding="utf-8")
+    print("wrote",OUT,"total seconds",out["total_seconds"],flush=True)
+    sys.exit(0)
 for label,condition in (("india_address_top300","q.country='India' AND r.address_rank<=300"),
                         ("india_address_top500","q.country='India' AND r.address_rank<=500"),
                         ("all_address_top300","r.address_rank<=300")):
@@ -425,5 +484,6 @@ RNG.shuffle(core_rescued)
     json.dumps({"remaining_misses":core_misses[:60],
                 "incrementally_rescued":core_rescued[:40]},ensure_ascii=False,indent=2),
     encoding="utf-8")
+out["total_seconds"] = round(time.perf_counter()-start_all,1)
 OUT.write_text(json.dumps(out, indent=2), encoding="utf-8")
 print("wrote", OUT, "total seconds", out["total_seconds"])

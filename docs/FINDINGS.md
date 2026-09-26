@@ -1,6 +1,6 @@
 # Findings and decisions
 
-_Updated 25 September 2026. This is the canonical record of what we found, what each experiment measured, and why decisions changed. For the ordered work queue, read [NEXT.md](NEXT.md). The private repository is `https://github.com/yashdoke7/Amazon-ML-Challenge-26`._
+_Updated 26 September 2026. This is the canonical record of what we found, what each experiment measured, and why decisions changed. For the ordered work queue, read [NEXT.md](NEXT.md). The private repository is `https://github.com/yashdoke7/Amazon-ML-Challenge-26`._
 
 ## What we are trying to achieve
 
@@ -34,7 +34,7 @@ The main probe uses 5,000 seeded training S1 records with 17,312 true links, sea
 
 The **oracle ceiling** assumes a perfect future matcher selects every true link that reached the candidate set and rejects all false links. It is an upper bound on this sample, not actual performance. The last route offers a strong cost/coverage tradeoff: the core-name rescue adds 583 true links and 164,420 pairs over the top-100 set. Even so, its naive full-test extrapolation is about **356 million pairs**, so full-scale runtime and further pruning remain real constraints. The 5,000 queries were exploratory; confirm on the frozen development/validation split before relying on them.
 
-High-token recall was US 91.9%, India 85.4%, cross-script 70.5%, blank target address 61.0%, weak address 56.8%, and both-weak 19.9%. A single joint name/address Jaro-Winkler ranker destroyed the blank-address slice: only 5.0% survived its top 100. Separate name and address quotas were substantially safer. These slice findings have not yet been confirmed on the frozen development split.
+High-token recall was US 91.9%, India 85.4%, cross-script 70.5%, blank target address 61.0%, weak address 56.8%, and both-weak 19.9%. A single joint name/address Jaro-Winkler ranker destroyed the blank-address slice: only 5.0% survived its top 100. Separate name and address quotas were substantially safer. The later full development run confirmed the cross-script ranking gap and the benefit of address-token overlap.
 
 Follow-up slice analysis found the core rescue at US 94.0%, India 86.4%, blank target address 76.3%, cross-script **59.8%**, and both-weak **3.4%**. Enlarging the India address quota to top 500 raises cross-script recall to 66.4% but adds **542,000** pairs for only **117** additional true links. This is an inefficient global fix. The next language/address tests should improve the similarity signal or targeted blocking, rather than just increase Jaro-Winkler quotas. These still need confirmation on the frozen development split.
 
@@ -47,6 +47,12 @@ Adding the India address top-500 quota on this same development set increased th
 The first focused rescue, a normalized Source 1 name to target domain-stem block, was tested against the full development baseline. It added 19,807 candidate pairs and 93 true links, raising edge recall from 91.18% to 91.31% and the oracle ceiling from 0.9617 to 0.9624. Keep it as an optional low-cost channel; it is not the main multilingual solution.
 
 An address-number rescue was then tested across all development rows. Normalized numeric tokens were frequency-capped to avoid common-number explosions. The tighter setting (`df<=500`, one selected number token) added 814,609 candidates and 204 true links over core rescue, raising edge recall from 91.18% to 91.45% and the oracle ceiling from 0.9617 to 0.9630. The broader setting (`df<=1,000`, two selected tokens) added 2,460,208 candidates and 431 true links, reaching 91.75% and 0.9643. This is a weak cost/recall tradeoff; keep the number route optional and do not make it the main fix.
+
+An audit of the address-number probe found its candidate arithmetic sound. Its script recorded `total_seconds` before the later rescue routes, so that timing field understated complete runtime; this has been fixed. No trained score is implied by those recall figures.
+
+A focused address rerank then changed the tradeoff. On the full 22,133-row development partition, India-only top-50 ranking by normalized address-token containment added **171,364 candidates and 686 true links** over core rescue. Edge recall rose from 91.18% to **92.08%**, non-singleton complete-set recall from 78.97% to **81.24%**, and the oracle macro-F0.5 ceiling from 0.9617 to **0.9653**. Cross-script recall rose from 62.53% to **70.76%**; both-weak recall rose from 6.29% to **16.55%**. Top-100 added 215,362 more candidates but only 56 more true links than top-50, so top-50 is the preferred tested quota. The full focused probe took 297.6 seconds locally, making full-test runtime a scale risk.
+
+Separately, accent-folded core-name equality added **53,138 candidates and 328 true links** over core rescue on full development, reaching 91.61% edge recall and a 0.9644 oracle ceiling. It helps Latin accent variation at low candidate cost. The overlap and accent routes were measured separately against core; their combined incremental benefit has not been measured. Both remain candidate routes that need a precision-focused matcher.
 
 Details and reproducible scripts: [DEEP_EDA.md](../analysis/DEEP_EDA.md), [RETRIEVAL_PROBES.md](../analysis/RETRIEVAL_PROBES.md), [RETRIEVAL_MISS_AUDIT.md](../analysis/RETRIEVAL_MISS_AUDIT.md), and [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md). Raw record extracts and aggregate JSON outputs stay local and ignored by Git.
 

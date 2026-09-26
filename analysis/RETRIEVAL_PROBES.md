@@ -54,13 +54,17 @@ Independent exact normalized-name keys were unioned with the name-or-address top
 | Top-100 + compact exact name | 907,433 | 89.26% | 75.79% | 0.9465 |
 | Top-100 + core compact exact name | 1,027,502 | 90.91% | 78.18% | 0.9579 |
 
-The core-name rescue adds 583 true links and 164,420 total candidate pairs over the pruned set. It surpasses the original 9.37M-pair high token set's oracle ceiling at about 11% of its candidate count. This is strong evidence for complementary routes, although 1.03M pairs on 5k queries still extrapolates to roughly 356M test pairs and requires careful streaming and further pruning. Source and country slice results for this rescue still need measurement on a frozen validation set.
+The core-name rescue adds 583 true links and 164,420 total candidate pairs over the pruned set. It surpasses the original 9.37M-pair high token set's oracle ceiling at about 11% of its candidate count. This is strong evidence for complementary routes, although 1.03M pairs on 5k queries still extrapolates to roughly 356M test pairs and requires careful streaming and further pruning. Country and source slices were later measured on the development split; the validation split remains untouched.
 
 The core rescue was subsequently confirmed on all 22,133 development S1 rows: 4,518,733 pairs, 69,730 true links, 91.18% edge recall, 78.97% complete-set recall, and 0.9617 oracle macro F0.5 ceiling. Candidate-count quantiles were median 195, p90 253, p99 724, maximum 1,527. India address top-500 added 2,402,517 pairs and 404 true links, reaching 91.71% and 0.9638; this is not the default due to cost.
 
 A normalized Source 1 name to target domain-stem block unioned with the core baseline on all development S1 added 19,807 candidates and 93 true links, reaching 91.31% edge recall and a 0.9624 oracle ceiling. It is a modest low-cost rescue, not the main multilingual solution.
 
 On all 22,133 development S1 rows, normalized address-number blocks were tested as a targeted rescue. `df<=500, top1` added 814,609 candidates and 204 true links, reaching 91.45% edge recall and a 0.9630 oracle ceiling. `df<=1,000, top2` added 2,460,208 candidates and 431 true links, reaching 91.75% and 0.9643. These gains are modest for their pair cost; the route stays optional.
+
+An audit found the probe's `total_seconds` had been captured before domain and number rescue evaluation. This timing bug is corrected; the pair and recall counts were unaffected.
+
+On all 22,133 development S1, an India-only address-token containment top-50 route added 171,364 pairs and 686 true links to core rescue. The union reached 92.08% edge recall, 81.24% complete-set recall, and a 0.9653 oracle F0.5 ceiling. Cross-script recall rose from 62.53% to 70.76%; both-weak recall from 6.29% to 16.55%. Top-100 added another 215,362 pairs for just 56 further links. Separately, accent-folded core-name equality added 53,138 pairs and 328 links over core rescue, reaching a 0.9644 oracle ceiling. These gains have not yet been measured together. The focused run took 297.6 seconds locally, so full-scale efficiency requires attention.
 
 ### Hard slices and address-quota test
 
