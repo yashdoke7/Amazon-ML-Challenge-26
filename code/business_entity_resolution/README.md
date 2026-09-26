@@ -26,10 +26,11 @@ python code/business_entity_resolution/src/build_index.py --data-dir dataset/tes
 python code/business_entity_resolution/src/infer.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/model.joblib --output-dir output --batch-size 5000 --threshold 0.65
 Move-Item output/matching_results.tsv output/matching_results_uncapped.tsv
 python code/business_entity_resolution/src/cap_predictions.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/model.joblib --input output/matching_results_uncapped.tsv --output output/matching_results.tsv --cap 11
-python utils/validate_submission.py --matching output/matching_results.tsv --candidate output/candidate_pairs.tsv --test-dir dataset/test --check-ids
+python code/business_entity_resolution/src/stream_validate.py --matching output/matching_results.tsv --candidate output/candidate_pairs.tsv --test-dir dataset/test
+python utils/validate_submission.py --matching output/matching_results.tsv --candidate output/__no_candidates__.tsv --test-dir dataset/test --check-ids
 ```
 
-Inference writes one row per test Source 1 entity, including empty match/candidate lists. The final matches are always drawn from that row's last-stage candidate set. If inference stops between complete batches, rerun the same inference command with `--resume`; it checks that both output files have matching row IDs before appending. If a process stopped during the write of one batch, repair or discard that partial batch first. Apply the cap only after inference finishes, and submit the capped `matching_results.tsv`.
+Inference writes one row per test Source 1 entity, including empty match/candidate lists. The final matches are always drawn from that row's last-stage candidate set. If inference stops between complete batches, rerun the same inference command with `--resume`; it checks that both output files have matching row IDs before appending. If a process stopped during the write of one batch, repair or discard that partial batch first. Apply the cap only after inference finishes, and submit the capped `matching_results.tsv`. The supplied validator holds all candidate IDs in memory and is too large for this machine at full scale; the streaming validator checks both files and their subset relation, while the supplied validator checks final match ID existence.
 
 ## Method and reproducibility
 
