@@ -1,6 +1,7 @@
 """End-to-end development score for a small TF-IDF address retrieval quota."""
 
 import csv
+import argparse
 import json
 import subprocess
 import sys
@@ -40,10 +41,19 @@ def run(*args):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--base-prefix", default="blank_frequency_top40")
+    parser.add_argument("--extra", type=Path, default=EXTRA)
+    parser.add_argument("--result", type=Path,
+                        default=ROOT / "analysis" / "india_address_tfidf_end_to_end_results.json")
+    args = parser.parse_args()
     started = time.perf_counter()
-    base_candidates = read_ids(TMP / "generalized_top40_candidates.tsv", "candidate_entity_ids")
-    base_raw = read_ids(TMP / "blank_frequency_top40_raw.tsv", "matched_entity_ids")
-    base_final = read_ids(TMP / "blank_frequency_top40_final.tsv", "matched_entity_ids")
+    candidate_path = (TMP / "generalized_top40_candidates.tsv" if
+                      args.base_prefix == "blank_frequency_top40" else
+                      TMP / f"{args.base_prefix}_candidates.tsv")
+    base_candidates = read_ids(candidate_path, "candidate_entity_ids")
+    base_raw = read_ids(TMP / f"{args.base_prefix}_raw.tsv", "matched_entity_ids")
+    base_final = read_ids(TMP / f"{args.base_prefix}_final.tsv", "matched_entity_ids")
     assert set(base_candidates) == set(base_raw) == set(base_final)
     queries = {}
     with (DATA / "train_source1.tsv").open(encoding="utf-8", newline="") as stream:
@@ -51,7 +61,7 @@ def main():
             if row["entity_id"] in base_candidates:
                 queries[row["entity_id"]] = row
     pairs = []
-    with EXTRA.open(encoding="utf-8", newline="") as stream:
+    with args.extra.open(encoding="utf-8", newline="") as stream:
         for row in csv.DictReader(stream, delimiter="\t"):
             q = row["source1_entity_id"]
             assert q in queries and queries[q]["country"] == "India"
@@ -105,9 +115,9 @@ def main():
             if row.selected:
                 additions[row.s1_id].add(row.target_id)
         revised = {q: base_raw[q] | additions[q] for q in base_raw}
-        raw = TMP / f"tfidf_top{quota}_raw.tsv"
-        capped = TMP / f"tfidf_top{quota}_capped.tsv"
-        final = TMP / f"tfidf_top{quota}_final.tsv"
+        raw = TMP / f"{args.base_prefix}_tfidf_top{quota}_raw.tsv"
+        capped = TMP / f"{args.base_prefix}_tfidf_top{quota}_capped.tsv"
+        final = TMP / f"{args.base_prefix}_tfidf_top{quota}_final.tsv"
         with raw.open("w", encoding="utf-8", newline="") as stream:
             writer = csv.writer(stream, delimiter="\t", lineterminator="\n")
             writer.writerow(["source1_entity_id", "matched_entity_ids"])
@@ -120,16 +130,23 @@ def main():
             "--model", PACKAGE / "generalized_model.joblib", "--input", capped,
             "--output", final)
         scored = score(read_ids(final, "matched_entity_ids"), truth, countries)
+        selected_true = {q: len(additions[q] & truth[q]) for q in additions}
+        selected_false = {q: len(additions[q] - truth[q]) for q in additions}
         result["quotas"][str(quota)] = {
             "new_candidates": sum(map(len, candidate_extra.values())),
             "new_true_candidates": sum(len(candidate_extra[q] & truth[q]) for q in candidate_extra),
             "selected_additions": sum(map(len, additions.values())),
+            "selected_true_additions": sum(selected_true.values()),
+            "selected_false_additions": sum(selected_false.values()),
+            "selected_true_on_previously_empty_queries": sum(
+                count for q, count in selected_true.items() if not base_raw[q]),
+            "selected_true_on_previously_nonempty_queries": sum(
+                count for q, count in selected_true.items() if base_raw[q]),
             "raw": score(revised, truth, countries), "final": scored}
         print("quota", quota, "new_candidates", result["quotas"][str(quota)]["new_candidates"],
               "macro", scored["macro_f05"], "seconds", round(time.perf_counter()-started, 1), flush=True)
     result["seconds_total"] = round(time.perf_counter()-started, 1)
-    destination = ROOT / "analysis" / "india_address_tfidf_end_to_end_results.json"
-    destination.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    args.result.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(result, indent=2), flush=True)
 
 

@@ -1,6 +1,7 @@
 """Build and validate the Unicode-aware portal-size-limited submission.
 
-This runs from the already saved broad test candidates. It never uploads files.
+This runs from the already saved broad test candidates and independently fits
+the India address TF-IDF index from supplied test targets. It never uploads.
 Restarting after interruption skips completed full-length intermediate TSVs.
 """
 
@@ -19,7 +20,9 @@ PACKAGE = ROOT / "code" / "business_entity_resolution"
 OUTPUT = ROOT / "output"
 FINAL = OUTPUT / "final"
 EXPECTED = 1_732_544
+EXPECTED_INDIA = 809_986
 TOP_K = 40
+ADDRESS_K = 20
 
 
 def run(*args):
@@ -53,6 +56,9 @@ def main():
     OUTPUT.mkdir(exist_ok=True)
     FINAL.mkdir(exist_ok=True)
     broad = OUTPUT / "candidate_pairs.tsv"
+    base_candidate = OUTPUT / "generalized_base_candidate_pairs.tsv"
+    base_raw = OUTPUT / "generalized_base_results_uncapped.tsv"
+    address_extra = OUTPUT / "india_address_tfidf_top20.tsv"
     compact = OUTPUT / "generalized_compact_candidate_pairs.tsv"
     raw = OUTPUT / "generalized_compact_results_uncapped.tsv"
     capped = OUTPUT / "generalized_compact_results_capped.tsv"
@@ -64,14 +70,26 @@ def main():
         return
     if row_count(broad) != EXPECTED:
         raise ValueError("Broad candidate file is incomplete")
-    if row_count(compact) != EXPECTED or row_count(raw) != EXPECTED:
+    if row_count(base_candidate) != EXPECTED or row_count(base_raw) != EXPECTED:
         run(PACKAGE / "src" / "two_stage_rescore.py", "--data-dir", DATA,
-            "--db", DB, "--broad-candidate", broad, "--candidate", compact,
-            "--matching", raw, "--top-k", str(TOP_K), "--workers", "4",
+            "--db", DB, "--broad-candidate", broad,
+            "--candidate", base_candidate, "--matching", base_raw,
+            "--top-k", str(TOP_K), "--workers", "4",
             "--matcher-model", PACKAGE / "generalized_model.joblib",
             "--blank-specialist-model", PACKAGE / "blank_frequency_model.joblib",
             "--blank-threshold", "0.8",
             "--threshold", "0.75", "--country-threshold", "India:0.65")
+    if row_count(address_extra) != EXPECTED_INDIA:
+        run(PACKAGE / "src" / "address_tfidf_retrieval.py", "--data-dir", DATA,
+            "--output", address_extra, "--top-k", str(ADDRESS_K))
+    if row_count(compact) != EXPECTED or row_count(raw) != EXPECTED:
+        run(PACKAGE / "src" / "merge_address_candidates.py", "--data-dir", DATA,
+            "--db", DB, "--base-candidate", base_candidate,
+            "--base-matching", base_raw, "--extra", address_extra,
+            "--candidate", compact, "--matching", raw,
+            "--model", PACKAGE / "generalized_model.joblib",
+            "--blank-specialist", PACKAGE / "blank_frequency_model.joblib",
+            "--workers", "4")
     run(PACKAGE / "src" / "cap_predictions.py", "--data-dir", DATA, "--db", DB,
         "--model", PACKAGE / "generalized_model.joblib", "--input", raw,
         "--output", capped, "--cap", "11")
@@ -99,7 +117,9 @@ def main():
     pdf = OUTPUT / "pdf" / "Vulcans_approach_summary.pdf"
     if pdf.is_file():
         shutil.copyfile(pdf, FINAL / pdf.name)
-    result = {"queries": EXPECTED, "last_stage_candidate_pairs": count,
+    result = {"queries": EXPECTED, "india_address_queries": EXPECTED_INDIA,
+              "address_quota": ADDRESS_K,
+              "last_stage_candidate_pairs": count,
               "archive": str(FINAL / "Vulcans_submission.zip"),
               "archive_bytes": archive_size,
               "leaderboard_tsv": str(FINAL / "matching_results.tsv"),

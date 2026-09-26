@@ -82,7 +82,7 @@ def main():
           "10.32 million targets, and 7.64 million labeled links. Test adds France with no French "
           "training labels. The metric is macro F0.5 over Source 1 groups, so false merges and "
           "missed singletons matter alongside retrieval recall."),
-        H("1. Retrieve broad candidates with complementary routes"),
+        H("1. Retrieve candidates with complementary routes"),
         P("A local DuckDB index stores Unicode name and address tokens, target frequencies, and "
           "compact legal-suffix name keys. Each query uses rare name and address token postings "
           "within the same country. Separate name and address Jaro-Winkler top-100 quotas protect "
@@ -92,12 +92,15 @@ def main():
           "so France is processed without hard-coded exclusion."),
         H("2. Learned last-stage block, then final matching"),
         P("A frozen 23-feature LightGBM ranks the broad union and passes at most 40 candidates "
-          "per Source 1 to a separate 35-feature final LightGBM. The recorded candidate TSV is "
-          "exactly this last-stage set. On all 22,133 development queries, it retained "
-          "70,735/70,741 broad-reachable true links, losing one selected true link. The final "
-          "model was trained on 3.95 million pairs from 20,000 queries. It compares original "
-          "Unicode text and local ASCII-transliterated name/address views, plus soft address-number "
-          "agreement. No remote service is used; the global threshold is 0.80."),
+          "per Source 1. A local word TF-IDF search over all distinct India target addresses "
+          "adds up to 20 target IDs per India query. The recorded final candidate TSV is the "
+          "union actually scored. On 22,133 development queries, top 40 retained 70,735/70,741 "
+          "broad-reachable true links; the address quota added 107,846 candidates and 1,346 "
+          "reachable true links. No pretrained weights or external data are used for this search."),
+        P("A separate 35-feature Unicode/transliteration LightGBM was trained on 5.25 million "
+          "pairs mined from 190,086 training-owned queries. A 36-feature specialist replaces "
+          "its score for targets with empty addresses, using target core-name frequency. "
+          "India/other thresholds are 0.65/0.75; blank-address threshold is 0.80."),
         H("3. Resolve group and ownership conflicts"),
         P("Rank selected links by model probability and retain at most 11 per Source 1, the largest "
           "true group in the full training labels. Assign a target predicted by multiple Source 1 "
@@ -105,12 +108,11 @@ def main():
           "contract. A fixed address-number veto was rejected for this model because it reduced "
           "labeled F0.5."),
         H("Retrieval checks that changed the design"),
-        B("The core candidate route reached 91.18% link recall on all 22,133 development "
-          "queries with 4.52 million pairs; its oracle macro F0.5 ceiling was 0.9617."),
-        B("India address-overlap top-50 added 686 true links for 171,364 extra pairs and "
-          "raised cross-script recall from 62.53% to 70.76% versus the core route."),
-        B("Accent-folded core-name equality independently added 328 true links for 53,138 "
-          "extra pairs. These two rescue routes were measured separately before union."),
+        B("The broad lexical union had 4.74 million development pairs and an oracle macro "
+          "F0.5 ceiling of 0.96793. The learned top-40 block kept the ceiling at 0.96788."),
+        B("A full-index India address TF-IDF search found 1,870/3,070 missed true links "
+          "among its top 100 address keys. Its bounded quota improved measured end-to-end "
+          "F0.5 on development and separate frozen validation."),
         PageBreak(),
         Paragraph("Measured evidence and submission", styles["TitleCustom"]),
         Paragraph("All scores below are local macro F0.5; public and private leaderboard scores "
@@ -125,9 +127,10 @@ def main():
         ["Combined candidate oracle", "22,133 development queries", "0.96793 upper bound"],
         ["Learned top-40 oracle", "22,133 development queries", "0.96788 upper bound"],
         ["Original 23-feature baseline", "Full development, 3 output passes", "0.88331"],
-        ["Previous 27-feature model", "Full development, cap + owner", "0.89761"],
-        ["35-feature Unicode model", "Full development, cap + owner", "0.90831"],
-        ["35-feature Unicode model", "Frozen 2,000-query validation", "0.90416"],
+        ["Hard + blank specialist", "Development, top 40, cap + owner", "0.92322"],
+        ["Plus India address top 20", "Development, cap + owner", "0.93183"],
+        ["Hard + blank specialist", "Frozen 1,994-query validation", "0.91845"],
+        ["Plus India address top 20", "Frozen 1,994-query validation", "0.92752"],
     ]
     table = Table(table_data, colWidths=[2.08 * inch, 2.32 * inch, 1.48 * inch], repeatRows=1)
     table.setStyle(TableStyle([
@@ -144,21 +147,21 @@ def main():
         H("What the measurements mean"),
         B("The candidate oracle assumes perfect scoring on retrieved pairs. It measures the "
           "retrieval ceiling, not an achieved model score."),
-        B("The learned top-40 block controls the final ZIP size. It lost one selected true "
-          "link across 22,133 development queries; raising the cutoff to 45 recovered no "
-          "additional selection and added 106,709 candidates."),
-        B("The Unicode-aware model improved frozen validation from 0.89272 to 0.90416 and "
-          "full development from 0.89761 to 0.90831. India gained most; US was nearly "
-          "unchanged. The test mix has more India, but French quality is still unmeasured."),
+        B("The learned top-40 block controls most candidate volume. The local address quota "
+          "adds 107,846 development pairs and raised final macro F0.5 by 0.00861; the "
+          "independent frozen sample gained 0.00907. Only the measured top-20 quota is used."),
+        B("The general matcher compares original Unicode and local ASCII-transliterated "
+          "name/address views, plus soft number agreement. The blank-address specialist "
+          "uses locally computed core-name rarity. No French labels guided either model."),
         B("France has no truth labels. In a 20,000-query test slice, generic-name collisions "
           "remained before capping. The top-11 cap was retained; no French F0.5 is claimed."),
         H("Reproducibility and fair play"),
         P("The final ZIP contains the exact last-stage candidate TSV, matching TSV, runnable "
-          "Python source, both locally trained model weights, pinned dependencies, and the full "
-          "methodology. The broad lexical union is a reproducible intermediate; the submitted "
-          "candidate TSV lists every pair fed to the final matcher. Every predicted ID belongs "
-          "to that set. Streaming and official validators are run before submission. No supplied "
-          "record text is sent to a remote service."),
+          "Python source, three locally trained model weights, pinned dependencies, and the full "
+          "methodology. Both broad lexical and TF-IDF indexes are reproducible intermediates "
+          "from supplied records. Every predicted ID belongs to the submitted candidate set. "
+          "Streaming and official validators are run before submission. No supplied record "
+          "text is sent to a remote service."),
         H("Team"),
         P("Yash Kailas Doke, Harsh Jitendra Jain, Ayush Tiwari, and Vedant Kaulgekar."),
     ]

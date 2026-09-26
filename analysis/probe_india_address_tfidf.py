@@ -26,11 +26,13 @@ DEV = ROOT / "tmp" / "development_full"
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--candidate-file", type=Path,
+                        default=DEV / "candidate_pairs.tsv")
     parser.add_argument("--export-candidates", type=Path,
                         help="Export top-100 target IDs for every development India query")
     args = parser.parse_args()
     started = time.perf_counter()
-    with (DEV / "candidate_pairs.tsv").open(encoding="utf-8", newline="") as stream:
+    with args.candidate_file.open(encoding="utf-8", newline="") as stream:
         candidates = {row["source1_entity_id"]: set(row["candidate_entity_ids"].split(","))
                       if row["candidate_entity_ids"] else set()
                       for row in csv.DictReader(stream, delimiter="\t")}
@@ -69,7 +71,7 @@ def main():
                 if row["entity_id"] in wanted:
                     target_name_index[row["entity_id"]] = index
     misses = [(q, target_name_index[t]) for q, t in missed if t in target_name_index]
-    assert len(misses) > 1000
+    assert len(misses) > 0
     print("records", count, "names", len(names), "misses", len(misses),
           "seconds", round(time.perf_counter()-started, 1), flush=True)
     vectorizer = TfidfVectorizer(analyzer="word", ngram_range=(1, 2), min_df=2,
