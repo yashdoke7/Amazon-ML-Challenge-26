@@ -4,7 +4,7 @@ Private team workspace for analysis and a reproducible submission. Source 1 is t
 
 ## Current stage
 
-Row-level exploratory analysis and several candidate-retrieval probes are complete. A deterministic validation split exists; matching, full-test inference, and leaderboard submission are **not yet complete**. The two canonical documents are [findings and decisions](docs/FINDINGS.md) and [next experiments](docs/NEXT.md). Supporting measurements are in [the detailed EDA](analysis/DEEP_EDA.md), [the retrieval probes](analysis/RETRIEVAL_PROBES.md), and [the experiment log](docs/EXPERIMENT_LOG.md).
+Row-level exploratory analysis and candidate-retrieval probes are complete. A first matching baseline has been evaluated on a 2,000-entity validation sample; full-test inference and leaderboard submission are **not yet complete**. The two canonical documents are [findings and decisions](docs/FINDINGS.md) and [next experiments](docs/NEXT.md). Supporting measurements are in [the detailed EDA](analysis/DEEP_EDA.md), [the retrieval probes](analysis/RETRIEVAL_PROBES.md), and [the experiment log](docs/EXPERIMENT_LOG.md).
 
 ## Layout
 

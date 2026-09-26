@@ -21,21 +21,25 @@ from rapidfuzz import fuzz
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(__file__).resolve().parents[1] / "6ab10eb3b23ba_student_resource" / "student_resource" / "dataset" / "train"
 QUERY_SPLIT = os.environ.get("QUERY_SPLIT", "all")
-if QUERY_SPLIT not in ("all", "development"):
-    raise ValueError("QUERY_SPLIT must be 'all' or 'development'")
-if QUERY_SPLIT == "development":
+if QUERY_SPLIT not in ("all", "development", "validation"):
+    raise ValueError("QUERY_SPLIT must be 'all', 'development', or 'validation'")
+if QUERY_SPLIT != "all":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "code" / "business_entity_resolution" / "src"))
     from validation import entity_split
 FOCUSED_RERANK = os.environ.get("FOCUSED_RERANK") == "1"
+EXPORT_FULL_CANDIDATES = os.environ.get("EXPORT_FULL_CANDIDATES") == "1"
+if FOCUSED_RERANK and EXPORT_FULL_CANDIDATES:
+    raise ValueError("Choose one probe mode")
 OUT = Path(__file__).resolve().parent / ("token_retrieval_focused_results.json" if FOCUSED_RERANK else
-    "token_retrieval_dev_results.json" if QUERY_SPLIT=="development" else "token_retrieval_results.json")
+    "token_retrieval_dev_results.json" if QUERY_SPLIT=="development" else
+    "token_retrieval_validation_results.json" if QUERY_SPLIT=="validation" else "token_retrieval_results.json")
 RNG = random.Random(20260925)
 N = int(os.environ.get("QUERY_COUNT", "5000"))
 sample = []
 eligible_seen = 0
 with (ROOT / "train_ground_truth.tsv").open(encoding="utf-8", newline="") as f:
     for row in csv.DictReader(f, delimiter="\t"):
-        if QUERY_SPLIT == "development" and entity_split(row["source1_entity_id"]) != "development":
+        if QUERY_SPLIT != "all" and entity_split(row["source1_entity_id"]) != QUERY_SPLIT:
             continue
         ids = row["matched_entity_ids"].split(",") if row["matched_entity_ids"] else []
         item = (row["source1_entity_id"], ids)
@@ -302,6 +306,46 @@ for label,expr in (("compact",compact_expr),("core",core_expr)):
     out["rescue"][label]["candidate_count_quantiles"] = {k:counts[int(p*(len(counts)-1))]
         for k,p in (("median",.5),("p90",.9),("p99",.99),("max",1.0))}
     print("rescue",label,out["rescue"][label],flush=True)
+if EXPORT_FULL_CANDIDATES:
+    if QUERY_SPLIT == "development" or QUERY_SPLIT == "all" and N != 5000:
+        raise ValueError("Export supports the initial 5k all-query sample or a validation sample")
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "code" / "business_entity_resolution" / "src"))
+    from validation import entity_split
+    query_splits = pd.DataFrame([(q["entity_id"],entity_split(q["entity_id"])) for q in queries],
+                                columns=["s1_id","split"])
+    con.register("query_splits",query_splits)
+    if QUERY_SPLIT == "all":
+        heldout_targets = []
+        with (ROOT / "train_ground_truth.tsv").open(encoding="utf-8",newline="") as stream:
+            for row in csv.DictReader(stream,delimiter="\t"):
+                if entity_split(row["source1_entity_id"]) != "training" and row["matched_entity_ids"]:
+                    heldout_targets.extend(row["matched_entity_ids"].split(","))
+        con.register("heldout_targets",pd.DataFrame({"target_id":heldout_targets}))
+    heldout_join = "LEFT JOIN heldout_targets h USING(target_id)" if QUERY_SPLIT == "all" else ""
+    heldout_filter = "WHERE s.split!='training' OR e.target_id IS NOT NULL OR h.target_id IS NULL" if QUERY_SPLIT == "all" else ""
+    export_path = (OUT.parent / ("full_validation_pairs.parquet" if QUERY_SPLIT=="validation" else "full_core_pairs.parquet")).as_posix()
+    con.execute(f"""
+        COPY (
+          WITH labeled AS (
+            SELECT p.s1_id,p.target_id,s.split,
+                   e.target_id IS NOT NULL is_match
+            FROM pairs_rescued_core p JOIN query_splits s USING(s1_id)
+            LEFT JOIN truth_edges e USING(s1_id,target_id)
+            {heldout_join}
+            {heldout_filter}
+          )
+          SELECT p.*,q.business_name q_name,q.business_address q_address,
+                 t.business_name t_name,t.business_address t_address,
+                 q.country,left(t.entity_id,2) target_source
+          FROM labeled p JOIN queries q ON p.s1_id=q.entity_id
+          JOIN ({targets}) t ON p.target_id=t.entity_id
+        ) TO '{export_path}' (FORMAT PARQUET)
+    """)
+    out["export"] = con.execute(f"SELECT count(*),sum(cast(is_match as int)) FROM read_parquet('{export_path}')").fetchone()
+    out["total_seconds"] = round(time.perf_counter()-start_all,1)
+    OUT.write_text(json.dumps(out,indent=2),encoding="utf-8")
+    print("exported complete core candidate sample",export_path,out["export"],"seconds",out["total_seconds"],flush=True)
+    sys.exit(0)
 if FOCUSED_RERANK:
     def focused_metrics(table):
         n = con.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
