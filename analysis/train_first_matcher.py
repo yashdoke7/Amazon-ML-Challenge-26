@@ -28,9 +28,10 @@ sys.path.insert(0, str(ROOT / "code" / "business_entity_resolution" / "src"))
 from validation import entity_split, f05_for_query  # noqa: E402
 
 DATA = ROOT / "6ab10eb3b23ba_student_resource" / "student_resource" / "dataset" / "train"
-PAIRS = Path(os.environ.get("MATCHER_PAIRS", str(ROOT / "analysis" / "full_core_pairs.parquet")))
-OUT = ROOT / "analysis" / "first_matcher_results.json"
-MODEL_OUT = ROOT / "analysis" / "first_matcher_model.joblib"
+TRAIN_COMBINED = os.environ.get("TRAIN_COMBINED") == "1"
+PAIRS = ROOT / "analysis" / ("full_combined_pairs.parquet" if TRAIN_COMBINED else "full_core_pairs.parquet")
+OUT = ROOT / "analysis" / ("first_matcher_combined_training_results.json" if TRAIN_COMBINED else "first_matcher_results.json")
+MODEL_OUT = ROOT / "analysis" / ("first_matcher_combined_model.joblib" if TRAIN_COMBINED else "first_matcher_model.joblib")
 TOKEN_RX = regex.compile(r"[\p{L}\p{M}\p{N}]+")
 NUMBER_RX = re.compile(r"\d+")
 LEGAL_RX = re.compile(r"\b(?:inc|llc|ltd|limited|private|pvt|corp|corporation|llp|co|company|sas|sarl|sa|eurl)\b")

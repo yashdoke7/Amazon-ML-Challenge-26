@@ -11,13 +11,18 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from train_first_matcher import DATA, FEATURE_NAMES, MODEL_OUT, ROOT, entity_split, f05_for_query, pair_features
+from train_first_matcher import DATA, FEATURE_NAMES, ROOT, entity_split, f05_for_query, pair_features
 
-PAIRS = ROOT / "analysis" / "full_validation_pairs.parquet"
-METRICS = ROOT / "analysis" / "first_matcher_large_validation_results.json"
-ERRORS = ROOT / "analysis" / "first_matcher_errors_results.json"
+COMBINED = os.environ.get("EVAL_COMBINED") == "1"
+COMBINED_MODEL = os.environ.get("EVAL_COMBINED_MODEL") == "1"
+PAIRS = ROOT / "analysis" / ("full_validation_combined_pairs.parquet" if COMBINED else "full_validation_pairs.parquet")
+suffix = "combined_retrained" if COMBINED and COMBINED_MODEL else "combined" if COMBINED else "large"
+METRICS = ROOT / "analysis" / f"first_matcher_{suffix}_validation_results.json"
+ERRORS = ROOT / "analysis" / f"first_matcher_{suffix}_errors_results.json"
+MODEL_PATH = ROOT / "analysis" / ("first_matcher_combined_model.joblib" if COMBINED_MODEL else "first_matcher_model.joblib")
+TRAINING_RESULTS = ROOT / "analysis" / ("first_matcher_combined_training_results.json" if COMBINED_MODEL else "first_matcher_results.json")
 N = int(os.environ.get("VALIDATION_QUERY_COUNT", "2000"))
-THRESHOLD = json.loads((ROOT / "analysis" / "first_matcher_results.json").read_text(encoding="utf-8"))["calibration_threshold"]
+THRESHOLD = json.loads(TRAINING_RESULTS.read_text(encoding="utf-8"))["calibration_threshold"]
 
 
 def sampled_truth():
@@ -51,7 +56,7 @@ def main():
         features[i] = pair_features(row.q_name,row.t_name,row.q_address,row.t_address,row.target_source)
         if i and i % 100_000 == 0:
             print("features",i,"seconds",round(time.perf_counter()-tic,1),flush=True)
-    model = joblib.load(MODEL_OUT)
+    model = joblib.load(MODEL_PATH)
     assert list(model.feature_name_) == FEATURE_NAMES
     probabilities = model.predict_proba(features)[:,1]
     df["probability"] = probabilities
@@ -74,7 +79,7 @@ def main():
         for row in csv.DictReader(stream,delimiter="\t"):
             if row["entity_id"] in truth:
                 countries[row["entity_id"]] = row["country"]
-    out = {"queries":len(ids),"candidate_pairs":len(df),"candidate_true_pairs":int(df.is_match.sum()),
+    out = {"candidate_file":PAIRS.name,"model_file":MODEL_PATH.name,"queries":len(ids),"candidate_pairs":len(df),"candidate_true_pairs":int(df.is_match.sum()),
            "threshold":THRESHOLD,"macro_f05":float(np.mean(scores)),
            "oracle_macro_f05":float(np.mean(oracle)),
            "complete_set_recall_nonempty":sum(truth[s].issubset(available[s]) for s in ids if truth[s])/max(1,sum(bool(truth[s]) for s in ids)),

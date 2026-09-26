@@ -62,6 +62,10 @@ The first larger validation check used a separately sampled **2,000 validation S
 
 The earlier local 204-validation-entity test on a partial extract produced an optimistic 0.8749; using the complete core set reduced it to 0.8633. That partial-extract result is superseded. Error inspection found high-confidence false matches among near-identical businesses at changed house/unit numbers and shared addresses, plus low-confidence true aliases, missing-address records, cross-script names, and number corruptions. These patterns support better calibration and targeted features; they do not justify a blanket exact-number reject rule because many labeled matches have corrupted numbers.
 
+The accent-folded core-name and India address-overlap top-50 channels were combined on the same 2,000 validation S1. The union has **430,900 candidates and 6,418 reachable true links**, versus 409,990 and 6,307 for core alone. Its oracle macro-F0.5 ceiling rose from 0.9614 to **0.9678**. Holding the original core-trained model and its 0.65 threshold fixed, actual macro F0.5 rose only from 0.8744 to **0.8754**: 59 extra true links came with 32 extra false links, and singleton accuracy fell from 75.7% to 74.8%.
+
+Retraining the same feature set on 1,040,124 combined-route training-sample pairs selected a 0.70 calibration threshold. On the same 2,000 validation S1 it scored **0.8730**, with 5,404 true links, 259 false links, and 76.7% singleton accuracy. This is below the core-trained model on the combined candidates. The measured gain is in retrieval; current features/calibration do not reliably convert it to macro F0.5. We are retaining the core-trained model as the current comparison baseline and will calibrate on more development entities before treating a small score difference as meaningful.
+
 Details and reproducible scripts: [DEEP_EDA.md](../analysis/DEEP_EDA.md), [RETRIEVAL_PROBES.md](../analysis/RETRIEVAL_PROBES.md), [RETRIEVAL_MISS_AUDIT.md](../analysis/RETRIEVAL_MISS_AUDIT.md), and [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md). Raw record extracts and aggregate JSON outputs stay local and ignored by Git.
 
 ## Why candidates are missed

@@ -28,8 +28,11 @@ if QUERY_SPLIT != "all":
     from validation import entity_split
 FOCUSED_RERANK = os.environ.get("FOCUSED_RERANK") == "1"
 EXPORT_FULL_CANDIDATES = os.environ.get("EXPORT_FULL_CANDIDATES") == "1"
+EXPORT_FOCUSED_CANDIDATES = os.environ.get("EXPORT_FOCUSED_CANDIDATES") == "1"
 if FOCUSED_RERANK and EXPORT_FULL_CANDIDATES:
     raise ValueError("Choose one probe mode")
+if EXPORT_FOCUSED_CANDIDATES and not FOCUSED_RERANK:
+    raise ValueError("EXPORT_FOCUSED_CANDIDATES requires FOCUSED_RERANK=1")
 OUT = Path(__file__).resolve().parent / ("token_retrieval_focused_results.json" if FOCUSED_RERANK else
     "token_retrieval_dev_results.json" if QUERY_SPLIT=="development" else
     "token_retrieval_validation_results.json" if QUERY_SPLIT=="validation" else "token_retrieval_results.json")
@@ -399,6 +402,48 @@ if FOCUSED_RERANK:
         """)
         out["focused"][f"india_address_overlap_top{k}"] = focused_metrics(f"pairs_overlap_{k}")
         print("focused overlap",k,{x:y for x,y in out["focused"][f"india_address_overlap_top{k}"].items() if x!="slice_recall"},flush=True)
+    con.execute("""
+        CREATE TEMP TABLE pairs_focused_combined AS
+        SELECT * FROM pairs_accent_rescued UNION SELECT * FROM pairs_overlap_50
+    """)
+    out["focused"]["accent_plus_india_overlap_top50"] = focused_metrics("pairs_focused_combined")
+    print("focused combined",{x:y for x,y in out["focused"]["accent_plus_india_overlap_top50"].items() if x!="slice_recall"},flush=True)
+    if EXPORT_FOCUSED_CANDIDATES:
+        if QUERY_SPLIT == "development" or QUERY_SPLIT == "all" and N != 5000:
+            raise ValueError("Focused export supports the initial 5k all-query sample or validation queries")
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "code" / "business_entity_resolution" / "src"))
+        from validation import entity_split
+        query_splits = pd.DataFrame([(q["entity_id"],entity_split(q["entity_id"])) for q in queries],
+                                    columns=["s1_id","split"])
+        con.register("query_splits",query_splits)
+        if QUERY_SPLIT == "all":
+            heldout_targets = []
+            with (ROOT / "train_ground_truth.tsv").open(encoding="utf-8",newline="") as stream:
+                for row in csv.DictReader(stream,delimiter="\t"):
+                    if entity_split(row["source1_entity_id"]) != "training" and row["matched_entity_ids"]:
+                        heldout_targets.extend(row["matched_entity_ids"].split(","))
+            con.register("heldout_targets",pd.DataFrame({"target_id":heldout_targets}))
+        heldout_join = "LEFT JOIN heldout_targets h USING(target_id)" if QUERY_SPLIT == "all" else ""
+        heldout_filter = "WHERE s.split!='training' OR e.target_id IS NOT NULL OR h.target_id IS NULL" if QUERY_SPLIT == "all" else ""
+        export_path = (OUT.parent / ("full_validation_combined_pairs.parquet" if QUERY_SPLIT=="validation" else "full_combined_pairs.parquet")).as_posix()
+        con.execute(f"""
+            COPY (
+              SELECT p.s1_id,p.target_id,s.split,
+                     e.target_id IS NOT NULL is_match,
+                     q.business_name q_name,q.business_address q_address,
+                     t.business_name t_name,t.business_address t_address,
+                     q.country,left(t.entity_id,2) target_source
+              FROM pairs_focused_combined p
+              JOIN query_splits s USING(s1_id)
+              JOIN queries q ON p.s1_id=q.entity_id
+              JOIN ({targets}) t ON p.target_id=t.entity_id
+              LEFT JOIN truth_edges e USING(s1_id,target_id)
+              {heldout_join}
+              {heldout_filter}
+            ) TO '{export_path}' (FORMAT PARQUET)
+        """)
+        out["focused_export"] = con.execute(f"SELECT count(*),sum(cast(is_match as int)) FROM read_parquet('{export_path}')").fetchone()
+        print("exported",export_path,out["focused_export"],flush=True)
     out["total_seconds"] = round(time.perf_counter()-start_all,1)
     OUT.write_text(json.dumps(out,indent=2),encoding="utf-8")
     print("wrote",OUT,"total seconds",out["total_seconds"],flush=True)
