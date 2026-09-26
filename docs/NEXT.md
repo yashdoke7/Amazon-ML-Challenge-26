@@ -30,6 +30,8 @@ Separate baseline and 27-feature archive paths are prepared in `analysis/package
 
 The separate 2-page Unstop approach document has a reproducible builder at `analysis/build_approach_pdf.py` and local output `output/pdf/Vulcans_approach_summary.pdf`. It was rendered and checked as two A4 pages. Refresh any final model/public-score wording before portal upload; the ZIP's full methodology remains a separate required file.
 
+`analysis/finalize_when_ready.py` is a local continuation helper. It waits until both full inference TSVs have the expected test row count and stable size, validates the raw pair subset, preserves uncapped baseline matches, fills the two methodology candidate-count placeholders, builds and validates the baseline ZIP, rescoring the saved candidates **once** with the India-threshold 27-feature model, then builds the second ZIP and writes `output/country_output_comparison.json`. It never uploads to the portal. `output/BASELINE_COMPLETE.json` and `output/FINALIZATION_COMPLETE.json` indicate durable milestones; inspect its log if either is absent after inference ends. The team leader must still upload the chosen TSV, ZIP, and two-page PDF before the official deadline.
+
 ## Do next, in order
 
 | Priority | Work and why | Decision gate |
