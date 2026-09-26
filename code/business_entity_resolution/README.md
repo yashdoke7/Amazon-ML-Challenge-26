@@ -39,7 +39,7 @@ Inference writes one row per test Source 1 entity, including empty match/candida
 To generate the optional variant after the baseline output is safely preserved, use separate result paths:
 
 ```powershell
-python code/business_entity_resolution/src/rescore_candidates.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/number_model.joblib --candidate output/candidate_pairs.tsv --output output/number_results_uncapped.tsv --threshold 0.75 --workers 4
+python code/business_entity_resolution/src/rescore_candidates.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/number_model.joblib --candidate output/candidate_pairs.tsv --output output/number_results_uncapped.tsv --threshold 0.75 --country-threshold India:0.65 --workers 4
 python code/business_entity_resolution/src/cap_predictions.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/number_model.joblib --input output/number_results_uncapped.tsv --output output/number_results_capped.tsv --cap 11
 python code/business_entity_resolution/src/resolve_exclusivity.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/number_model.joblib --input output/number_results_capped.tsv --output output/number_results.tsv
 ```

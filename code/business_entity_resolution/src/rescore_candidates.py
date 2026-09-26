@@ -29,7 +29,8 @@ def featurize_rows(rows, model_feature_names):
     return features
 
 
-def rescore_batch(con, model, model_feature_names, rows, threshold, writer, pool=None):
+def rescore_batch(con, model, model_feature_names, rows, threshold, writer, pool=None,
+                  country_thresholds=None):
     queries={q["entity_id"]:q for q,_ in rows}
     pairs=[(q["entity_id"],target) for q,ids in rows for target in ids]
     predictions=defaultdict(list)
@@ -53,7 +54,8 @@ def rescore_batch(con, model, model_feature_names, rows, threshold, writer, pool
             features=np.concatenate(list(pool.map(partial(featurize_rows,model_feature_names=model_feature_names),chunks)))
         probabilities=model.predict_proba(features)[:,1]
         for (s1,target),prob in zip(frame[["s1_id","target_id"]].itertuples(index=False,name=None),probabilities):
-            if prob>=threshold:
+            query_threshold=(country_thresholds or {}).get(queries[s1]["country"],threshold)
+            if prob>=query_threshold:
                 predictions[s1].append(target)
     for query,_ in rows:
         s1=query["entity_id"]
@@ -61,7 +63,8 @@ def rescore_batch(con, model, model_feature_names, rows, threshold, writer, pool
     return len(pairs),sum(map(len,predictions.values()))
 
 
-def rescore(data_dir, db_path, model_path, candidate_path, output_path, threshold, batch_size, wanted, workers):
+def rescore(data_dir, db_path, model_path, candidate_path, output_path, threshold, batch_size, wanted, workers,
+            country_thresholds=None):
     if candidate_path.resolve()==output_path.resolve():
         raise ValueError("Output path must differ from candidate input")
     con=duckdb.connect(str(db_path),read_only=True)
@@ -92,7 +95,8 @@ def rescore(data_dir, db_path, model_path, candidate_path, output_path, threshol
             assert len(ids)==len(set(ids)),("duplicate candidate",total_queries)
             batch.append((q,ids))
             if len(batch)>=batch_size:
-                n_pairs,n_matches=rescore_batch(con,model,model_feature_names,batch,threshold,writer,pool)
+                n_pairs,n_matches=rescore_batch(con,model,model_feature_names,batch,threshold,writer,pool,
+                                                country_thresholds)
                 total_queries+=len(batch)
                 total_pairs+=n_pairs
                 total_matches+=n_matches
@@ -101,7 +105,8 @@ def rescore(data_dir, db_path, model_path, candidate_path, output_path, threshol
                       "seconds",round(time.perf_counter()-tic,1),flush=True)
                 batch=[]
         if batch:
-            n_pairs,n_matches=rescore_batch(con,model,model_feature_names,batch,threshold,writer,pool)
+            n_pairs,n_matches=rescore_batch(con,model,model_feature_names,batch,threshold,writer,pool,
+                                            country_thresholds)
             total_queries+=len(batch)
             total_pairs+=n_pairs
             total_matches+=n_matches
@@ -121,6 +126,15 @@ if __name__=="__main__":
     parser.add_argument("--batch-size",type=int,default=5000)
     parser.add_argument("--query-ids",type=Path)
     parser.add_argument("--workers",type=int,default=1,help="CPU processes for exact pair features")
+    parser.add_argument("--country-threshold",action="append",default=[],metavar="COUNTRY:VALUE",
+                        help="Override the default threshold for one exact country label")
     args=parser.parse_args()
     wanted=set(args.query_ids.read_text(encoding="utf-8").splitlines()) if args.query_ids else None
-    rescore(args.data_dir,args.db,args.model,args.candidate,args.output,args.threshold,args.batch_size,wanted,args.workers)
+    country_thresholds={}
+    for setting in args.country_threshold:
+        country,value=setting.rsplit(":",1)
+        if not country or not 0<=float(value)<=1:
+            parser.error(f"Invalid country threshold: {setting}")
+        country_thresholds[country]=float(value)
+    rescore(args.data_dir,args.db,args.model,args.candidate,args.output,args.threshold,args.batch_size,wanted,
+            args.workers,country_thresholds)
