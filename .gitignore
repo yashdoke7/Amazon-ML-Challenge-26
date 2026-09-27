@@ -23,6 +23,7 @@ output/final_*/
 analysis/*_results.json
 analysis/*.log
 analysis/*_candidates.tsv
+analysis/current_gap_examples.jsonl
 
 # Environments, caches, credentials.
 .env

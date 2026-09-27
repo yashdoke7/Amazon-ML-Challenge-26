@@ -55,7 +55,7 @@ False positives cluster around nearly identical business names at different unit
 
 ## 6. Conclusion
 
-The method combines complementary fields and script-tolerant routes while controlling candidate volume and false merges. Its measured local result is **0.931181 macro F0.5** on 1,994 frozen validation queries with the bounded address and name quotas and group postprocessing. The India-only predecessor scored 0.931832 on the full development partition and received a 0.926444 public score; the revised result's public score remains unmeasured until upload. The final archive is checked against the 512 MB portal limit and ZIP integrity before use. The main uncertainty is generalization to France and residual alias/candidate-miss cases, which were not covered by French labels or external data.
+The method combines complementary fields and script-tolerant routes while controlling candidate volume and false merges. Its measured local result is **0.931181 macro F0.5** on 1,994 frozen validation queries with the bounded address and name quotas and group postprocessing. The India-only predecessor received a 0.926444 public score; the US-address revision received 0.92817. The further US-name revision's public score remains unmeasured until upload. The final archive is checked against the 512 MB portal limit and ZIP integrity before use. The main uncertainty is generalization to France and residual alias/candidate-miss cases, which were not covered by French labels or external data.
 
 ## Appendix: Code Artifacts
 
