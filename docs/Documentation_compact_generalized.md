@@ -29,7 +29,7 @@ On all 22,133 held-out development queries, the broad union contained 4,743,229 
 
 The additional India search fits a 200,000-feature word unigram/bigram TF-IDF vocabulary to all 3,654,994 distinct nonempty Indian target addresses in training. It normalizes locally with `anyascii`, scores every distinct target address by exact sparse cosine, ranks the top 100 address keys, and expands at most the first **20 target IDs** as an additional final-matcher quota. No pretrained model, external API, or identity lookup is used. On 8,824 India development queries, it supplied 107,846 new candidate pairs beyond top 40 and 1,346 reachable true links; the final matcher selected 1,209 of those links with 104 false additions. Full-development macro F0.5 after cap/owner rose **0.923221→0.931832**. On the separate frozen validation sample of 1,994 queries, the same quota added 9,615 candidates and raised macro F0.5 **0.918447→0.927518**. The final recorded candidate TSV is the union actually passed to the matcher. The search is rerun against supplied test targets at test inference.
 
-**Final test last-stage candidate pairs:** [Fill after compact run and validator] across 1,732,544 test Source 1 records
+**Final test last-stage candidate pairs:** 77,471,526 across 1,732,544 test Source 1 records
 
 ## 4. Matching Model
 
@@ -51,7 +51,7 @@ False positives cluster around nearly identical business names at different unit
 
 ## 6. Conclusion
 
-The method combines complementary fields and script-tolerant routes while controlling candidate volume and false merges. Its measured local result is **0.927518 macro F0.5** on 1,994 frozen validation queries with the top-20 address quota and group postprocessing, and **0.931832** on the full development partition. The final ZIP size and public score are separate checks. The main uncertainty is generalization to France and residual alias/candidate-miss cases, which were not covered by French labels or external data.
+The method combines complementary fields and script-tolerant routes while controlling candidate volume and false merges. Its measured local result is **0.927518 macro F0.5** on 1,994 frozen validation queries with the top-20 address quota and group postprocessing, and **0.931832** on the full development partition. The final archive is **495,161,412 bytes** and passed ZIP integrity testing; the public score remains unknown until upload. The main uncertainty is generalization to France and residual alias/candidate-miss cases, which were not covered by French labels or external data.
 
 ## Appendix: Code Artifacts
 
