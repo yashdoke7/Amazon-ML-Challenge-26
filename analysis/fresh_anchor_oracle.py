@@ -32,9 +32,11 @@ def main():
     if args.extra:
         with args.extra.open(encoding="utf-8", newline="") as f:
             for r in csv.DictReader(f, delimiter="\t"):
-                candidates[r["source1_entity_id"]].update(
-                    (r["candidate_entity_ids"] or "").split(",")[:args.extra_top_k]
-                )
+                q = r["source1_entity_id"]
+                if q in candidates:
+                    candidates[q].update(
+                        (r["candidate_entity_ids"] or "").split(",")[:args.extra_top_k]
+                    )
     total = empty = no_anchor = partial = complete = 0
     missed_links_with_anchor = missed_links_without_anchor = 0
     no_anchor_sizes = Counter()
