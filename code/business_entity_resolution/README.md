@@ -51,7 +51,33 @@ python code/business_entity_resolution/src/stream_validate.py --matching output/
 python utils/validate_submission.py --matching output/matching_results.tsv --candidate output/__no_candidates__.tsv --test-dir dataset/test --check-ids
 ```
 
-The broad lexical intermediate and TF-IDF indexes can be regenerated. `output/candidate_pairs.tsv` is the exact union of top-40 learned candidates, up to 20 India address IDs, up to five gated US address IDs, and up to ten gated US name IDs passed to the final matcher; the broad TSV is not submitted. The supplied validator's candidate check exceeds 32 GB RAM at full scale, so `stream_validate.py` checks every row and the candidate subset relation in bounded memory, while the supplied validator checks match ID existence. The bundled weights reproduce the submitted inference exactly. To rebuild the matcher from supplied labels, first build the train index, then run:
+The additional US character-address route uses a 120,000-feature character 3-4-gram TF-IDF address index built from supplied test targets. A sparse product of each query's 16 strongest character terms retrieves up to 300 address keys, which are reranked with full-vector cosine; at most ten target IDs are passed to the existing final matcher. From the completed address-plus-name outputs above, run:
+
+```powershell
+Copy-Item output/candidate_pairs.tsv output/us_both_candidate_pairs.tsv
+Copy-Item output/us_both_raw.tsv output/us_both_raw_saved.tsv
+python code/business_entity_resolution/src/char_address_retrieval.py --data-dir dataset/test --split test --country US --field business_address --top-k 10 --term-limit 16 --shortlist 300 --output output/us_char_address_candidates.tsv
+python code/business_entity_resolution/src/merge_address_candidates.py --data-dir dataset/test --db test_index.duckdb --base-candidate output/us_both_candidate_pairs.tsv --base-matching output/us_both_raw_saved.tsv --extra output/us_char_address_candidates.tsv --candidate output/candidate_pairs.tsv --matching output/us_char_raw.tsv --model code/business_entity_resolution/generalized_model.joblib --blank-specialist code/business_entity_resolution/blank_frequency_model.joblib --country US --general-threshold 0.75 --blank-threshold 0.80 --sparse-extra --workers 4
+python code/business_entity_resolution/src/cap_predictions.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/us_char_raw.tsv --output output/us_char_capped.tsv --cap 11
+python code/business_entity_resolution/src/resolve_exclusivity.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/us_char_capped.tsv --output output/matching_results.tsv
+python code/business_entity_resolution/src/stream_validate.py --matching output/matching_results.tsv --candidate output/candidate_pairs.tsv --test-dir dataset/test
+python utils/validate_submission.py --matching output/matching_results.tsv --candidate output/__no_candidates__.tsv --test-dir dataset/test --check-ids
+```
+
+The final bounded India name route follows the US character-address pass. Keep its candidate and uncapped raw files before the India merge:
+
+```powershell
+Copy-Item output/candidate_pairs.tsv output/us_char_candidate_pairs.tsv
+Copy-Item output/us_char_raw.tsv output/us_char_raw_saved.tsv
+python code/business_entity_resolution/src/char_address_retrieval.py --data-dir dataset/test --split test --country India --field business_name --top-k 5 --term-limit 16 --shortlist 300 --output output/india_char_name_candidates.tsv
+python code/business_entity_resolution/src/merge_address_candidates.py --data-dir dataset/test --db test_index.duckdb --base-candidate output/us_char_candidate_pairs.tsv --base-matching output/us_char_raw_saved.tsv --extra output/india_char_name_candidates.tsv --candidate output/candidate_pairs.tsv --matching output/combined_char_raw.tsv --model code/business_entity_resolution/generalized_model.joblib --blank-specialist code/business_entity_resolution/blank_frequency_model.joblib --country India --general-threshold 0.65 --blank-threshold 0.80 --sparse-extra --workers 4
+python code/business_entity_resolution/src/cap_predictions.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/combined_char_raw.tsv --output output/combined_char_capped.tsv --cap 11
+python code/business_entity_resolution/src/resolve_exclusivity.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/combined_char_capped.tsv --output output/matching_results.tsv
+python code/business_entity_resolution/src/stream_validate.py --matching output/matching_results.tsv --candidate output/candidate_pairs.tsv --test-dir dataset/test
+python utils/validate_submission.py --matching output/matching_results.tsv --candidate output/__no_candidates__.tsv --test-dir dataset/test --check-ids
+```
+
+The broad lexical intermediate and TF-IDF indexes can be regenerated. `output/candidate_pairs.tsv` is the exact union of top-40 learned candidates, up to 20 India word-address IDs, up to five gated US word-address IDs, up to ten gated US character-name IDs, up to ten US character-address IDs, and up to five India character-name IDs passed to the final matcher; the broad TSV is not submitted. The supplied validator's candidate check exceeds 32 GB RAM at full scale, so `stream_validate.py` checks every row and the candidate subset relation in bounded memory, while the supplied validator checks match ID existence. The bundled weights reproduce the submitted inference exactly. To rebuild the matcher from supplied labels, first build the train index, then run:
 
 ```powershell
 python code/business_entity_resolution/src/build_index.py --data-dir dataset/train --db train_index.duckdb
