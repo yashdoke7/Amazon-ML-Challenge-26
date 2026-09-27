@@ -52,7 +52,9 @@ def run(data_dir, output, top_k=20, batch_size=20, query_ids=None, max_queries=N
         max_features=200_000, token_pattern=r"(?u)\b\w+\b",
         sublinear_tf=True, dtype=np.float32)
     corpus = vectorizer.fit_transform(addresses)
-    transpose = corpus.T
+    # sparse_dot_topn converts CSC internally; materialize CSR only once so
+    # large query runs do not repeat that conversion for every batch.
+    transpose = corpus.T.tocsr() if sparse_topn else corpus.T
     print("tfidf_shape", corpus.shape, "nnz", corpus.nnz,
           "seconds", round(time.perf_counter()-started, 1), flush=True)
     del addresses, address_index

@@ -87,7 +87,10 @@ def main():
     corpus = vectorizer.fit_transform(names)
     print("matrix", corpus.shape, "nnz", corpus.nnz,
           "seconds", round(time.perf_counter()-started, 1), flush=True)
+    feature_count, nonzeros = corpus.shape[1], int(corpus.nnz)
     del names, name_index
+    transpose = corpus.T.tocsr()
+    del corpus
     qids = list(dict.fromkeys(q for q, _ in misses))
     wanted = {}
     for q, t in misses:
@@ -96,7 +99,7 @@ def main():
     for first in range(0, len(qids), args.batch_size):
         batch = qids[first:first+args.batch_size]
         encoded = vectorizer.transform([query_names[q] for q in batch])
-        result = sp_matmul_topn(encoded, corpus.T, top_n=100,
+        result = sp_matmul_topn(encoded, transpose, top_n=100,
                                 n_threads=args.threads, sort=True)
         for j, q in enumerate(batch):
             lo, hi = result.indptr[j:j+2]
@@ -114,8 +117,8 @@ def main():
                   "seconds", round(time.perf_counter()-started, 1), flush=True)
     result = {"country": args.country, "target_records": record_count,
               "unique_name_keys": len(volume), "missed_links": len(misses),
-              "distinct_missed_queries": len(qids), "tfidf_features": corpus.shape[1],
-              "tfidf_nnz": int(corpus.nnz), "counts": dict(counts),
+              "distinct_missed_queries": len(qids), "tfidf_features": feature_count,
+              "tfidf_nnz": nonzeros, "counts": dict(counts),
               "seconds": round(time.perf_counter()-started, 1),
               "note": "Top-K is name-key rank; duplicate IDs and classifier may reduce actual link gain."}
     dest = ROOT / "analysis" / f"name_tfidf_{args.country.lower()}_missing_results.json"
