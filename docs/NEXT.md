@@ -1,6 +1,6 @@
 # Next actions and handoff
 
-_Updated 27 September 2026, about 16:50 IST. Evidence and method decisions are in [FINDINGS.md](FINDINGS.md); the submission contract is in [RULES.md](RULES.md)._
+_Updated 27 September 2026, about 18:25 IST. Evidence and method decisions are in [FINDINGS.md](FINDINGS.md); the submission contract is in [RULES.md](RULES.md)._
 
 ## Current state: verified submission files; public score 0.9317
 
@@ -22,7 +22,7 @@ The new routes improved complete development macro F0.5 **0.936843→0.939906** 
 
 1. Keep the verified 0.9317 package as the safe submission. The user has uploaded its TSV for public scoring; the ZIP and PDF must be submitted as the challenge requires before the deadline. Do not upload automatically.
 2. The bounded group-aware post-match experiment **failed**: its best development threshold lowered macro F0.5 **0.939906→0.938746**, and frozen validation **0.933266→0.932028**. It is not promoted; keep the 0.9317 package. Details are in FINDINGS and `analysis/probe_anchor_group_rule.py`.
-3. Stop score revisions unless a distinct method shows a material independent validation gain and can be fully packaged before the deadline. A label-derived ideal S2/S3 group-propagation oracle reached **0.996882** on development and **0.995486** on frozen validation, but those are hypothetical ceilings, not achieved methods or a justification for unvalidated last-minute changes. The expanded candidate-only oracle **0.987535** also assumes perfect decisions and is not an expected leaderboard score.
+3. The proposed rarity model blend raised current development **0.939907→0.941073** but frozen validation only **0.933266→0.933651** (+0.000385), below the predeclared +0.002 gate; no full test rescore is justified. The proposed three-epoch neural replacement has a measured optimistic training-only lower bound of 13.81 hours and cannot be built/validated before today's deadline. Preserve 0.9317 and stop score revisions unless a distinct method shows a material independent gain and can be fully packaged in time. See FINDINGS for evidence and why higher oracle scores are not achieved scores.
 4. The `finish-vulcans-submission` heartbeat was set to pause after this verified package was built. Check its status before starting duplicate completion work.
 
 ## Rules and reproduction
