@@ -37,7 +37,7 @@ A fourth, independently tested route fits 120,000 character 3-4-gram TF-IDF addr
 
 A fifth route applies the same locally fit 16-term/300-shortlist character search to India target **names**, expands at most five IDs per India query, and scores them with the same final matcher. Its normalized text uses local ASCII transliteration to bridge script changes. This route added 63 true and seven false selected links after the previous development route, raising full-development macro F0.5 **0.939611→0.939906**. On the independent frozen validation set it added six true and one false link, raising **0.932633→0.933266**. The top-ten quota gave a marginally larger local gain at substantially greater candidate volume, so top five was chosen for the 512 MB archive budget. No external identity data or pretrained model is used.
 
-**Final test last-stage candidate pairs:** PENDING_COMBINED_CHAR_CANDIDATE_COUNT across 1,732,544 test Source 1 records
+**Final test last-stage candidate pairs:** 83,724,941 across 1,732,544 test Source 1 records
 
 ## 4. Matching Model
 
