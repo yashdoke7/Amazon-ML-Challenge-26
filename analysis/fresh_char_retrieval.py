@@ -26,13 +26,21 @@ def norm(value):
     return " ".join(re.findall(r"[a-z0-9]+", anyascii(value or "").lower()))
 
 
+def field_value(row, field):
+    if field == "combined":
+        return " ".join((row["business_name"], row["business_name"],
+                         row["business_address"] or ""))
+    return row[field]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--country", required=True)
     parser.add_argument("--split", choices=("train", "test"), default="train")
     parser.add_argument("--data-dir", type=Path,
                         help="Directory containing <split>_source{1,2,3}.tsv")
-    parser.add_argument("--field", choices=("business_name", "business_address"), required=True)
+    parser.add_argument("--field", choices=("business_name", "business_address", "combined"),
+                        required=True)
     parser.add_argument("--query-ids", type=Path)
     parser.add_argument("--top-k", type=int, default=50)
     parser.add_argument("--batch-size", type=int, default=100)
@@ -55,9 +63,10 @@ def main():
     for source in (2, 3):
         with (data / f"{args.split}_source{source}.tsv").open(encoding="utf-8", newline="") as stream:
             for row in csv.DictReader(stream, delimiter="\t"):
-                if row["country"] != args.country or not row[args.field]:
+                value = field_value(row, args.field)
+                if row["country"] != args.country or not value:
                     continue
-                key = row[args.field]
+                key = value
                 idx = key_index.get(key)
                 if idx is None:
                     idx = len(texts)
@@ -80,7 +89,7 @@ def main():
     with (data / f"{args.split}_source1.tsv").open(encoding="utf-8", newline="") as stream:
         for row in csv.DictReader(stream, delimiter="\t"):
             if (query_ids is None or row["entity_id"] in query_ids) and row["country"] == args.country:
-                queries.append((row["entity_id"], norm(row[args.field])))
+                queries.append((row["entity_id"], norm(field_value(row, args.field))))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     count = 0
     with args.output.open("w", encoding="utf-8", newline="") as stream:
