@@ -1,8 +1,8 @@
-"""Retrieve a bounded India address quota from the supplied target records.
+"""Retrieve a bounded same-country address quota from supplied target records.
 
 The TF-IDF vocabulary is fit locally from Source 2/3 addresses. No external
 business data, pretrained weights, network service, or stored vector file is
-needed. Output contains only India Source 1 rows, in their input order.
+needed. Output contains only chosen-country Source 1 rows in input order.
 """
 
 import argparse
@@ -19,9 +19,12 @@ from features import normalize
 
 
 def run(data_dir, output, top_k=20, batch_size=20, query_ids=None, max_queries=None,
-        country="India", query_term_limit=0, shortlist_size=500):
-    if top_k < 1 or batch_size < 1:
-        raise ValueError("top-k and batch-size must be positive")
+        country="India", query_term_limit=0, shortlist_size=500, sparse_topn=False,
+        search_threads=8):
+    if top_k < 1 or batch_size < 1 or search_threads < 1:
+        raise ValueError("top-k, batch-size, and search-threads must be positive")
+    if sparse_topn and query_term_limit:
+        raise ValueError("sparse-topn and query-term-limit cannot be combined")
     started = time.perf_counter()
     address_index = {}
     addresses = []
@@ -61,7 +64,11 @@ def run(data_dir, output, top_k=20, batch_size=20, query_ids=None, max_queries=N
     def score_batch(batch, writer):
         nonlocal n_queries, n_candidates
         encoded = vectorizer.transform([address for _, address in batch])
-        if query_term_limit:
+        if sparse_topn:
+            from sparse_dot_topn import sp_matmul_topn
+            similarities = sp_matmul_topn(encoded, transpose, top_n=100,
+                                          n_threads=search_threads, sort=True)
+        elif query_term_limit:
             term_rows, term_cols, term_values = [], [], []
             for j in range(encoded.shape[0]):
                 lo, hi = encoded.indptr[j:j+2]
@@ -140,8 +147,11 @@ if __name__ == "__main__":
     parser.add_argument("--country", default="India")
     parser.add_argument("--query-term-limit", type=int, default=0)
     parser.add_argument("--shortlist-size", type=int, default=500)
+    parser.add_argument("--sparse-topn", action="store_true")
+    parser.add_argument("--search-threads", type=int, default=8)
     args = parser.parse_args()
     run(args.data_dir, args.output, args.top_k, args.batch_size,
         set(args.query_ids.read_text(encoding="utf-8").splitlines())
         if args.query_ids else None, args.max_queries, args.country,
-        args.query_term_limit, args.shortlist_size)
+        args.query_term_limit, args.shortlist_size, args.sparse_topn,
+        args.search_threads)
