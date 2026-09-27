@@ -1,4 +1,4 @@
-"""Retrieve a bounded same-country address quota from supplied target records.
+"""Retrieve a bounded same-country address or name quota from supplied records.
 
 The TF-IDF vocabulary is fit locally from Source 2/3 addresses. No external
 business data, pretrained weights, network service, or stored vector file is
@@ -15,17 +15,19 @@ from anyascii import anyascii
 from sklearn.feature_extraction.text import TfidfVectorizer
 from scipy.sparse import csr_matrix
 
-from features import normalize
+from features import core, normalize
 
 
 def run(data_dir, output, top_k=20, batch_size=20, query_ids=None, max_queries=None,
         country="India", query_term_limit=0, shortlist_size=500, sparse_topn=False,
-        search_threads=8):
+        search_threads=8, name_mode=False):
     if top_k < 1 or batch_size < 1 or search_threads < 1:
         raise ValueError("top-k, batch-size, and search-threads must be positive")
     if sparse_topn and query_term_limit:
         raise ValueError("sparse-topn and query-term-limit cannot be combined")
     started = time.perf_counter()
+    field = "business_name" if name_mode else "business_address"
+    normalizer = core if name_mode else normalize
     address_index = {}
     addresses = []
     ids_by_address = []
@@ -34,7 +36,7 @@ def run(data_dir, output, top_k=20, batch_size=20, query_ids=None, max_queries=N
         path = data_dir / f"{data_dir.name}_source{source}.tsv"
         with path.open(encoding="utf-8", newline="") as stream:
             for row in csv.DictReader(stream, delimiter="\t"):
-                address = row["business_address"]
+                address = row[field]
                 if row["country"] != country or not address:
                     continue
                 target_count += 1
@@ -42,15 +44,20 @@ def run(data_dir, output, top_k=20, batch_size=20, query_ids=None, max_queries=N
                 if index is None:
                     index = len(addresses)
                     address_index[address] = index
-                    addresses.append(normalize(anyascii(address)))
+                    addresses.append(normalizer(anyascii(address)))
                     ids_by_address.append([])
                 ids_by_address[index].append(row["entity_id"])
     print("target_records", target_count, "address_keys", len(addresses),
           "seconds", round(time.perf_counter()-started, 1), flush=True)
-    vectorizer = TfidfVectorizer(
-        analyzer="word", ngram_range=(1, 2), min_df=2, max_df=0.8,
-        max_features=200_000, token_pattern=r"(?u)\b\w+\b",
-        sublinear_tf=True, dtype=np.float32)
+    if name_mode:
+        vectorizer = TfidfVectorizer(
+            analyzer="char", ngram_range=(3, 4), min_df=2, max_df=0.8,
+            max_features=120_000, sublinear_tf=True, dtype=np.float32)
+    else:
+        vectorizer = TfidfVectorizer(
+            analyzer="word", ngram_range=(1, 2), min_df=2, max_df=0.8,
+            max_features=200_000, token_pattern=r"(?u)\b\w+\b",
+            sublinear_tf=True, dtype=np.float32)
     corpus = vectorizer.fit_transform(addresses)
     # sparse_dot_topn converts CSC internally; materialize CSR only once so
     # large query runs do not repeat that conversion for every batch.
@@ -126,7 +133,7 @@ def run(data_dir, output, top_k=20, batch_size=20, query_ids=None, max_queries=N
             if row["country"] != country or (
                     query_ids is not None and row["entity_id"] not in query_ids):
                 continue
-            batch.append((row["entity_id"], normalize(anyascii(row["business_address"]))))
+            batch.append((row["entity_id"], normalizer(anyascii(row[field]))))
             if len(batch) == batch_size:
                 score_batch(batch, writer)
                 batch.clear()
@@ -151,9 +158,10 @@ if __name__ == "__main__":
     parser.add_argument("--shortlist-size", type=int, default=500)
     parser.add_argument("--sparse-topn", action="store_true")
     parser.add_argument("--search-threads", type=int, default=8)
+    parser.add_argument("--name-mode", action="store_true")
     args = parser.parse_args()
     run(args.data_dir, args.output, args.top_k, args.batch_size,
         set(args.query_ids.read_text(encoding="utf-8").splitlines())
         if args.query_ids else None, args.max_queries, args.country,
         args.query_term_limit, args.shortlist_size, args.sparse_topn,
-        args.search_threads)
+        args.search_threads, args.name_mode)

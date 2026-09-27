@@ -92,11 +92,12 @@ def main():
           "so France is processed without hard-coded exclusion."),
         H("2. Learned last-stage block, then final matching"),
         P("A frozen 23-feature LightGBM ranks the broad union and passes at most 40 candidates "
-          "per Source 1. A local word TF-IDF search over all distinct India target addresses "
-          "adds up to 20 target IDs per India query. The recorded final candidate TSV is the "
-          "union actually scored. On 22,133 development queries, top 40 retained 70,735/70,741 "
-          "broad-reachable true links; the address quota added 107,846 candidates and 1,346 "
-          "reachable true links. No pretrained weights or external data are used for this search."),
+          "per Source 1. A local word TF-IDF search adds up to 20 IDs per India query. For US "
+          "queries with at most three initial matches, a second exact sparse TF-IDF address "
+          "search adds up to five IDs. The recorded final candidate TSV is the union actually "
+          "scored. Top 40 retained 70,735/70,741 broad-reachable true links in development; "
+          "the India quota added 1,346 reachable links. No pretrained weights or external "
+          "data are used for these searches."),
         P("A separate 35-feature Unicode/transliteration LightGBM was trained on 5.25 million "
           "pairs mined from 190,086 training-owned queries. A 36-feature specialist replaces "
           "its score for targets with empty addresses, using target core-name frequency. "
@@ -113,6 +114,8 @@ def main():
         B("A full-index India address TF-IDF search found 1,870/3,070 missed true links "
           "among its top 100 address keys. Its bounded quota improved measured end-to-end "
           "F0.5 on development and separate frozen validation."),
+        B("The gated US top-five address route added 28 true links and zero false links on "
+          "frozen validation; the same final matcher scored every added pair."),
         PageBreak(),
         Paragraph("Measured evidence and submission", styles["TitleCustom"]),
         Paragraph("All scores below are local macro F0.5; public and private leaderboard scores "
@@ -131,6 +134,7 @@ def main():
         ["Plus India address top 20", "Development, cap + owner", "0.93183"],
         ["Hard + blank specialist", "Frozen 1,994-query validation", "0.91845"],
         ["Plus India address top 20", "Frozen 1,994-query validation", "0.92752"],
+        ["Plus gated US address top 5", "Frozen 1,994-query validation", "0.92989"],
     ]
     table = Table(table_data, colWidths=[2.08 * inch, 2.32 * inch, 1.48 * inch], repeatRows=1)
     table.setStyle(TableStyle([
@@ -140,16 +144,16 @@ def main():
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("LEFTPADDING", (0, 0), (-1, -1), 7),
         ("RIGHTPADDING", (0, 0), (-1, -1), 7),
-        ("TOPPADDING", (0, 0), (-1, -1), 7),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
     ]))
     story += [table,
         H("What the measurements mean"),
         B("The candidate oracle assumes perfect scoring on retrieved pairs. It measures the "
           "retrieval ceiling, not an achieved model score."),
-        B("The learned top-40 block controls most candidate volume. The local address quota "
-          "adds 107,846 development pairs and raised final macro F0.5 by 0.00861; the "
-          "independent frozen sample gained 0.00907. Only the measured top-20 quota is used."),
+        B("The learned top-40 block controls most candidate volume. India address top 20 "
+          "raised frozen macro F0.5 by 0.00907; gated US address top 5 added 0.00237. "
+          "Both quotas were measured before full test inference."),
         B("The general matcher compares original Unicode and local ASCII-transliterated "
           "name/address views, plus soft number agreement. The blank-address specialist "
           "uses locally computed core-name rarity. No French labels guided either model."),
@@ -157,7 +161,7 @@ def main():
           "remained before capping. The top-11 cap was retained; no French F0.5 is claimed."),
         H("Reproducibility and fair play"),
         P("The final ZIP contains the exact last-stage candidate TSV, matching TSV, runnable "
-          "Python source, three locally trained model weights, pinned dependencies, and the full "
+          "Python source, four locally trained model weights, pinned dependencies, and the full "
           "methodology. Both broad lexical and TF-IDF indexes are reproducible intermediates "
           "from supplied records. Every predicted ID belongs to the submitted candidate set. "
           "Streaming and official validators are run before submission. No supplied record "

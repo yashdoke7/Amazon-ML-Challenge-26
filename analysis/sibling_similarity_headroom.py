@@ -4,6 +4,7 @@ Positive-only upper bound; never use truth to make inference decisions.
 """
 
 import csv
+import argparse
 import json
 import sys
 from collections import Counter
@@ -38,6 +39,9 @@ def similarity(left, right):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--stage", choices=("missing", "rejected"), default="missing")
+    args = parser.parse_args()
     base = read(DEV / "generalized_top40_candidates.tsv", "candidate_entity_ids")
     address = read(ROOT / "analysis/india_address_tfidf_dev_candidates.tsv",
                    "candidate_entity_ids", 20)
@@ -48,7 +52,8 @@ def main():
     for q, candidates in base.items():
         siblings = truth[q] & selected[q]
         for t in truth[q] - selected[q]:
-            if t not in (candidates | address.get(q, set())) and siblings:
+            in_pool = t in (candidates | address.get(q, set()))
+            if (in_pool == (args.stage == "rejected")) and siblings:
                 missed.append((q, t, siblings))
                 target_ids.add(t)
                 target_ids.update(siblings)
@@ -91,7 +96,9 @@ def main():
             counts[f"sibling_either_ge_{threshold}"] += max(best_name, best_address) >= threshold
         counts["sibling_name_better_than_query_10"] += best_name >= q_name + 10
         counts["sibling_address_better_than_query_10"] += best_address >= q_address + 10
-    dest = ROOT / "analysis/sibling_similarity_headroom_results.json"
+    dest = ROOT / ("analysis/sibling_similarity_headroom_results.json" if
+                   args.stage == "missing" else
+                   "analysis/sibling_similarity_rejected_results.json")
     dest.write_text(json.dumps(dict(sorted(counts.items())), indent=2) + "\n",
                     encoding="utf-8")
     print(dest.read_text())

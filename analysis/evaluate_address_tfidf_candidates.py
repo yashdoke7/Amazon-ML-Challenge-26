@@ -48,9 +48,12 @@ def main():
     parser.add_argument("--country", default="India")
     parser.add_argument("--general-threshold", type=float, default=0.65)
     parser.add_argument("--tag", default="")
+    parser.add_argument("--quotas", type=int, nargs="+", default=list(QUOTAS))
     parser.add_argument("--result", type=Path,
                         default=ROOT / "analysis" / "india_address_tfidf_end_to_end_results.json")
     args = parser.parse_args()
+    if not args.quotas or min(args.quotas) < 1:
+        parser.error("Provide positive quotas")
     started = time.perf_counter()
     candidate_path = args.base_candidate or (TMP / "generalized_top40_candidates.tsv" if
                       args.base_prefix == "blank_frequency_top40" else
@@ -70,7 +73,7 @@ def main():
             q = row["source1_entity_id"]
             assert q in queries and queries[q]["country"] == args.country
             ids = row["candidate_entity_ids"].split(",") if row["candidate_entity_ids"] else []
-            for rank, target in enumerate(ids[:max(QUOTAS)]):
+            for rank, target in enumerate(ids[:max(args.quotas)]):
                 if target not in base_candidates[q]:
                     pairs.append((q, target, rank))
     con = duckdb.connect(str(DB), read_only=True)
@@ -110,7 +113,7 @@ def main():
     result = {"baseline_final": score(base_final, truth, countries),
               "extra_pairs_scored": len(frame), "seconds_features": round(time.perf_counter()-started, 1),
               "quotas": {}}
-    for quota in QUOTAS:
+    for quota in args.quotas:
         eligible = frame.loc[frame.extra_rank < quota]
         additions = defaultdict(set)
         candidate_extra = defaultdict(set)

@@ -43,6 +43,8 @@ def main():
                         default="development")
     parser.add_argument("--pairs-out", type=Path)
     parser.add_argument("--query-ids-out", type=Path)
+    parser.add_argument("--min-selected", type=int, default=0)
+    parser.add_argument("--max-selected", type=int)
     parser.add_argument("--result", type=Path,
                         default=ROOT / "analysis/anchor_retrieval_probe_results.json")
     args = parser.parse_args()
@@ -61,7 +63,9 @@ def main():
         chosen = read(DEV / "validation_tfidf_merged_final.tsv", "matched_entity_ids")
     truth = read(DATA / "train_ground_truth.tsv", "matched_entity_ids")
     rng = random.Random(20260927)
-    qids = rng.sample(sorted(base), min(args.queries, len(base)))
+    eligible = sorted(q for q in base if args.min_selected <= len(chosen[q]) and
+                      (args.max_selected is None or len(chosen[q]) <= args.max_selected))
+    qids = rng.sample(eligible, min(args.queries, len(eligible)))
     if args.query_ids_out:
         args.query_ids_out.parent.mkdir(parents=True, exist_ok=True)
         args.query_ids_out.write_text("\n".join(qids) + "\n", encoding="utf-8")
