@@ -7,6 +7,7 @@ idle, because candidate features and DuckDB need several CPU cores and RAM.
 """
 
 import csv
+import argparse
 import gc
 import json
 import sys
@@ -47,8 +48,13 @@ def feature_matrix(pool, frame):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--sample-size", type=int, default=SAMPLE)
+    parser.add_argument("--model-out", type=Path, default=MODEL)
+    parser.add_argument("--summary-out", type=Path, default=SUMMARY)
+    args = parser.parse_args()
     started = time.perf_counter()
-    truth, heldout_targets = sample_truth(DATA, count=SAMPLE)
+    truth, heldout_targets = sample_truth(DATA, count=args.sample_size)
     truth = {q: ids for q, ids in truth.items() if entity_split(q) == "training"}
     queries = []
     with (DATA / "train_source1.tsv").open(encoding="utf-8", newline="") as stream:
@@ -129,12 +135,14 @@ def main():
     model.fit(X[~cal], y[~cal], feature_name=GENERALIZED_FEATURE_NAMES,
               eval_set=[(X[cal], y[cal])], eval_metric="binary_logloss",
               callbacks=[lgb.early_stopping(50, verbose=False)])
-    joblib.dump(model, MODEL)
-    result = {"sample_requested": SAMPLE, "queries": len(queries),
+    args.model_out.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, args.model_out)
+    result = {"sample_requested": args.sample_size, "queries": len(queries),
               **counts, "training_rows": len(X),
               "best_iteration": int(model.best_iteration_),
               "seconds": round(time.perf_counter()-started, 1)}
-    SUMMARY.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    args.summary_out.parent.mkdir(parents=True, exist_ok=True)
+    args.summary_out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(result, indent=2), flush=True)
 
 

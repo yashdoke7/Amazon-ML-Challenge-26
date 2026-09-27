@@ -13,11 +13,13 @@ from pathlib import Path
 import numpy as np
 from anyascii import anyascii
 from sklearn.feature_extraction.text import TfidfVectorizer
+from scipy.sparse import csr_matrix
 
 from features import normalize
 
 
-def run(data_dir, output, top_k=20, batch_size=20, query_ids=None, max_queries=None):
+def run(data_dir, output, top_k=20, batch_size=20, query_ids=None, max_queries=None,
+        country="India", query_term_limit=0, shortlist_size=500):
     if top_k < 1 or batch_size < 1:
         raise ValueError("top-k and batch-size must be positive")
     started = time.perf_counter()
@@ -30,7 +32,7 @@ def run(data_dir, output, top_k=20, batch_size=20, query_ids=None, max_queries=N
         with path.open(encoding="utf-8", newline="") as stream:
             for row in csv.DictReader(stream, delimiter="\t"):
                 address = row["business_address"]
-                if row["country"] != "India" or not address:
+                if row["country"] != country or not address:
                     continue
                 target_count += 1
                 index = address_index.get(address)
@@ -50,18 +52,41 @@ def run(data_dir, output, top_k=20, batch_size=20, query_ids=None, max_queries=N
     transpose = corpus.T
     print("tfidf_shape", corpus.shape, "nnz", corpus.nnz,
           "seconds", round(time.perf_counter()-started, 1), flush=True)
-    del addresses, address_index, corpus
+    del addresses, address_index
+    if not query_term_limit:
+        del corpus
     output.parent.mkdir(parents=True, exist_ok=True)
     n_queries = n_candidates = 0
 
     def score_batch(batch, writer):
         nonlocal n_queries, n_candidates
         encoded = vectorizer.transform([address for _, address in batch])
-        similarities = (encoded @ transpose).tocsr()
+        if query_term_limit:
+            term_rows, term_cols, term_values = [], [], []
+            for j in range(encoded.shape[0]):
+                lo, hi = encoded.indptr[j:j+2]
+                values = encoded.data[lo:hi]
+                indices = encoded.indices[lo:hi]
+                k_terms = min(query_term_limit, len(values))
+                if k_terms:
+                    chosen = np.argpartition(values, -k_terms)[-k_terms:]
+                    term_rows.extend([j] * k_terms)
+                    term_cols.extend(indices[chosen])
+                    term_values.extend(values[chosen])
+            limited = csr_matrix((np.asarray(term_values, dtype=np.float32),
+                                  (term_rows, term_cols)), shape=encoded.shape)
+            similarities = (limited @ transpose).tocsr()
+        else:
+            similarities = (encoded @ transpose).tocsr()
         for j, (query_id, _) in enumerate(batch):
             lo, hi = similarities.indptr[j:j+2]
             values = similarities.data[lo:hi]
             indices = similarities.indices[lo:hi]
+            if query_term_limit and len(values) > shortlist_size:
+                selected = np.argpartition(values, -shortlist_size)[-shortlist_size:]
+                indices = indices[selected]
+            if query_term_limit and len(indices):
+                values = (corpus[indices] @ encoded[j].T).toarray().ravel()
             # Keep the same 100-address ranking used in the held-out probe.
             # Sparse scores have many exact ties; changing argpartition's k
             # changes tie selection even for the first 20 target IDs.
@@ -89,7 +114,7 @@ def run(data_dir, output, top_k=20, batch_size=20, query_ids=None, max_queries=N
         writer.writerow(["source1_entity_id", "candidate_entity_ids"])
         batch = []
         for row in csv.DictReader(stream, delimiter="\t"):
-            if row["country"] != "India" or (
+            if row["country"] != country or (
                     query_ids is not None and row["entity_id"] not in query_ids):
                 continue
             batch.append((row["entity_id"], normalize(anyascii(row["business_address"]))))
@@ -112,7 +137,11 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=20)
     parser.add_argument("--query-ids", type=Path)
     parser.add_argument("--max-queries", type=int)
+    parser.add_argument("--country", default="India")
+    parser.add_argument("--query-term-limit", type=int, default=0)
+    parser.add_argument("--shortlist-size", type=int, default=500)
     args = parser.parse_args()
     run(args.data_dir, args.output, args.top_k, args.batch_size,
         set(args.query_ids.read_text(encoding="utf-8").splitlines())
-        if args.query_ids else None, args.max_queries)
+        if args.query_ids else None, args.max_queries, args.country,
+        args.query_term_limit, args.shortlist_size)

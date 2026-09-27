@@ -1,9 +1,10 @@
-"""Evaluate the hard-negative model against the frozen 35-feature reference.
+"""Evaluate a hard-negative model against the frozen 35-feature reference.
 
 Choose thresholds using the development sample only. The separate validation
 sample is read once with those thresholds and never used to tune them.
 """
 
+import argparse
 import json
 import sys
 import time
@@ -50,15 +51,22 @@ def choose(frame, truth, probabilities):
 
 
 def main():
-    models = {"reference": joblib.load(BASE), "hard_negative": joblib.load(NEW)}
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", type=Path, default=NEW)
+    parser.add_argument("--training-summary", type=Path,
+                        default=ROOT / "analysis" / "hard_negative_generalized_training_results.json")
+    parser.add_argument("--result", type=Path,
+                        default=ROOT / "analysis" / "hard_negative_generalized_evaluation_results.json")
+    args = parser.parse_args()
+    models = {"reference": joblib.load(BASE), "hard_negative": joblib.load(args.model)}
     for model in models.values():
         assert list(model.feature_name_) == GENERALIZED_FEATURE_NAMES
     dev = prepare("full_development_combined_pairs.parquet", development_truth, models)
     chosen, sweep = choose(dev[0], dev[1], dev[2]["hard_negative"])
     val = prepare("full_validation_combined_pairs.parquet", validation_truth, models)
-    baseline_threshold = {"India": 0.8, "other": 0.8}
+    baseline_threshold = {"India": 0.65, "other": 0.75}
     result = {
-        "training_summary": json.loads((ROOT / "analysis" / "hard_negative_generalized_training_results.json").read_text()),
+        "training_summary": json.loads(args.training_summary.read_text()),
         "thresholds_selected_on_development_only": chosen,
         "development_sweep": sweep,
         "development_reference": score(dev[0], dev[1], dev[2]["reference"], baseline_threshold),
@@ -67,7 +75,7 @@ def main():
         "validation_new": score(val[0], val[1], val[2]["hard_negative"], chosen),
         "seconds": {"development": dev[3], "validation": val[3]},
     }
-    destination = ROOT / "analysis" / "hard_negative_generalized_evaluation_results.json"
+    destination = args.result
     destination.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(result, indent=2), flush=True)
 

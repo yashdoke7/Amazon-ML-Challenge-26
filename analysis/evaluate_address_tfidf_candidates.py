@@ -44,11 +44,15 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-prefix", default="blank_frequency_top40")
     parser.add_argument("--extra", type=Path, default=EXTRA)
+    parser.add_argument("--base-candidate", type=Path)
+    parser.add_argument("--country", default="India")
+    parser.add_argument("--general-threshold", type=float, default=0.65)
+    parser.add_argument("--tag", default="")
     parser.add_argument("--result", type=Path,
                         default=ROOT / "analysis" / "india_address_tfidf_end_to_end_results.json")
     args = parser.parse_args()
     started = time.perf_counter()
-    candidate_path = (TMP / "generalized_top40_candidates.tsv" if
+    candidate_path = args.base_candidate or (TMP / "generalized_top40_candidates.tsv" if
                       args.base_prefix == "blank_frequency_top40" else
                       TMP / f"{args.base_prefix}_candidates.tsv")
     base_candidates = read_ids(candidate_path, "candidate_entity_ids")
@@ -64,7 +68,7 @@ def main():
     with args.extra.open(encoding="utf-8", newline="") as stream:
         for row in csv.DictReader(stream, delimiter="\t"):
             q = row["source1_entity_id"]
-            assert q in queries and queries[q]["country"] == "India"
+            assert q in queries and queries[q]["country"] == args.country
             ids = row["candidate_entity_ids"].split(",") if row["candidate_entity_ids"] else []
             for rank, target in enumerate(ids[:max(QUOTAS)]):
                 if target not in base_candidates[q]:
@@ -94,7 +98,7 @@ def main():
         special_X = np.column_stack((X[blank], np.log1p(
             frame.loc[blank, "target_core_df"].to_numpy(dtype=np.float32))))
         probabilities[blank] = specialist.predict_proba(special_X)[:, 1]
-    frame["selected"] = probabilities >= np.where(blank, 0.8, 0.65)
+    frame["selected"] = probabilities >= np.where(blank, 0.8, args.general_threshold)
     truth = {}
     with (DATA / "train_ground_truth.tsv").open(encoding="utf-8", newline="") as stream:
         for row in csv.DictReader(stream, delimiter="\t"):
@@ -115,9 +119,10 @@ def main():
             if row.selected:
                 additions[row.s1_id].add(row.target_id)
         revised = {q: base_raw[q] | additions[q] for q in base_raw}
-        raw = TMP / f"{args.base_prefix}_tfidf_top{quota}_raw.tsv"
-        capped = TMP / f"{args.base_prefix}_tfidf_top{quota}_capped.tsv"
-        final = TMP / f"{args.base_prefix}_tfidf_top{quota}_final.tsv"
+        stem = args.base_prefix + (f"_{args.tag}" if args.tag else "")
+        raw = TMP / f"{stem}_tfidf_top{quota}_raw.tsv"
+        capped = TMP / f"{stem}_tfidf_top{quota}_capped.tsv"
+        final = TMP / f"{stem}_tfidf_top{quota}_final.tsv"
         with raw.open("w", encoding="utf-8", newline="") as stream:
             writer = csv.writer(stream, delimiter="\t", lineterminator="\n")
             writer.writerow(["source1_entity_id", "matched_entity_ids"])
