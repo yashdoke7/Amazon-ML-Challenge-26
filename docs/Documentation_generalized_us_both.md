@@ -33,7 +33,7 @@ A second independent word unigram/bigram TF-IDF search uses the supplied US targ
 
 A third route fits a 120,000-feature character 3-4-gram TF-IDF vocabulary to locally transliterated, legal-suffix-normalized US target names. Its same-country sparse search ranks the top 100 distinct name keys and expands at most ten target IDs for US queries that had at most two selected links after the India stage. This gate and quota were selected using development data, with no labels from the test set. On the complete 22,133-query development partition, this name route alone raised macro F0.5 **0.931832→0.934029** with the fixed two-match gate. On the independent 1,994-query frozen validation sample, adding it after the gated US address route contributed seven true links and zero false links, raising macro F0.5 **0.929892→0.931181** after cap and ownership. All target names and vocabulary come from the supplied Source 2/3 records; there is no remote lookup or pretrained embedding. Every added pair is recorded in the last-stage candidate TSV.
 
-**Final test last-stage candidate pairs:** PENDING_US_BOTH_CANDIDATE_COUNT across 1,732,544 test Source 1 records
+**Final test last-stage candidate pairs:** 79,821,601 across 1,732,544 test Source 1 records
 
 ## 4. Matching Model
 

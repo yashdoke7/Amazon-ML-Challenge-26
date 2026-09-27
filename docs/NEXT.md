@@ -1,31 +1,30 @@
 # Next actions and handoff
 
-_Updated 27 September 2026, about 13:12 IST. Read [FINDINGS.md](FINDINGS.md) for evidence and [RULES.md](RULES.md) for the submission contract._
+_Updated 27 September 2026, about 14:10 IST. Evidence is in [FINDINGS.md](FINDINGS.md); the submission contract is in [RULES.md](RULES.md)._
 
-## Current stage: submission files verified
+## Current stage: submission ready
 
-The **gated US-address revision** is now verified and ready locally. Its frozen-validation macro F0.5 is **0.929892** versus 0.927518 for the India-only predecessor. The user reported public **0.92817** for the US-address revision versus **0.926444, rank 2260** for the India-only submission: a gain of **0.001726**. The name route remains unsubmitted and its public score unknown. The user will handle portal uploads. France has no labeled local evaluation.
+The verified gated US address **plus US name** revision is in `output/final/`. The previous public-scored US address package is preserved in `output/final_us_address_verified/`; the earlier India-only package is in `output/final_india_only_0p926444/`. The user handles all portal uploads. Deadline: **27 September 2026, 23:59 IST**.
 
-The verified archive includes the learned top-40 block, India address top-20, and a same-country US address top-5 route for **399,606** US queries with at most three initial matches. The last-stage candidate TSV has **78,408,708** pairs for all **1,732,544** Source 1 queries. The streaming row/order/subset validator, official match-ID validator, and ZIP CRC check passed. The old public-scored version is preserved at `output/final_india_only_0p926444/`.
-
-## Files for the team
-
-| Purpose | Local path | Verification |
+| Purpose | Local file | Verification |
 | --- | --- | --- |
-| Public leaderboard upload | `output/final/matching_results.tsv` | 1,732,544 rows; SHA-256 `7a91723a4293363a9c74f7cf7b45fe091f64b0309c4e9c4f7fe380e5a34261fd` |
-| Final archive upload | `output/final/Vulcans_submission.zip` | 500,490,082 bytes, below 512,000,000; 28 members; CRC and both validators passed |
-| Approach summary upload | `output/final/Vulcans_approach_summary.pdf` | Revised two-page A4 PDF, rendered and visually checked |
+| Leaderboard TSV | `output/final/matching_results.tsv` | 1,732,544 Source 1 rows; SHA-256 `11cc9d7c784da2ce293ecc82cb1aea4933f0c6b75602b8c65141987d12a8d235` |
+| Final ZIP | `output/final/Vulcans_submission.zip` | 476,517,448 bytes, below the 512,000,000-byte limit; SHA-256 `d1b39ef007483036da6cf9a95f074c8f65b00898c344401594315b902c458f3f` |
+| Approach summary | `output/final/Vulcans_approach_summary.pdf` | Revised two-page A4 PDF |
 
-The archive includes `output/matching_results.tsv`, exact `output/candidate_pairs.tsv`, code, model weights, and filled methodology. Its candidate member matches `output/generalized_us_address_candidate_pairs.tsv` by SHA-256 `e2e376a06d03412ac78d9b67325a5b3db89575c7f2b8d44541bc1d4e07b84e02`. The new completion marker is `output/US_ADDRESS_REVISION_COMPLETE.json`. Raw data and portal files stay local and are ignored by Git.
+The streaming row/order/candidate-subset validator, official match-ID validator, ZIP CRC, and archive member hash checks passed. The final candidate TSV has **79,821,601** pairs covering every test Source 1. Machine-readable manifest: `output/US_BOTH_REVISION_COMPLETE.json`. Source and compact findings are pushed to `https://github.com/yashdoke7/Amazon-ML-Challenge-26`; raw data and output artifacts are local and ignored by Git.
+
+The previous US address version scored **0.92817** on the public leaderboard; the India-only version scored **0.926444**. The new US name route improved frozen local validation **0.929892→0.931181** after the address route, but its public score is unknown until upload. France has no labeled local evaluation. Do not claim a 0.98+ score or top-50 rank from these measurements.
 
 ## Do next
 
-1. Preserve the verified US-address TSV/ZIP/PDF in `output/final/` while the final name experiment runs. The India-only public-scored fallback is in `output/final_india_only_0p926444/`. The competition objective remains macro F0.5 over complete Source 1 groups, including singletons; the original India-only candidate oracle was 0.978035 on development.
-2. **Major revision decision:** the predicted sibling context probe added only +0.0003 on frozen validation. Replacing the 23-feature top40 blocker with the final matcher or a hybrid did not improve the older 2k/2k samples; pruning did not lose their reachable true links. The 42-feature model gained +0.00788 versus a same-data 35-feature small model, but a 25% blend with the current larger matcher gained only +0.00188 on the older frozen 2k validation pool. The 400k-query retrain finished (10.49m kept pairs), but scored 0.918969 vs 0.920650 packaged reference on development and 0.910809 vs 0.910586 on fixed validation. **Reject full production rescore of this model.**
-3. **Anchor rescue measured but deferred:** On all 2,203 development queries with exactly one existing match, one-hop predicted-anchor top-5 + a development-selected dual-probability rule raised subgroup macro F0.5 0.834692→0.841476, worth only about +0.0007 when weighted across all queries before cap/owner. The all-query route costs many more anchors. This is not the major revision to run now. Data and code are in `docs/FINDINGS.md`, `analysis/anchor_retrieval_probe.py`, and `analysis/evaluate_anchor_rescue.py` if the faster retrieval options disappoint.
-4. **Active name route:** a full-index US character 3-4-gram TF-IDF search (PID 36572; unified shell session 95564) is writing `output/us_name_tfidf_top10_gated.tsv` for **237,217** US test queries with at most two matches after the India stage. The exact gate is `tmp/us_name_gate2_ids.txt`. **Do not treat the output as complete until the process exits with `COMPLETE 237217`.** The development-selected name top-10/≤2 rule alone raised full-development 0.931832→0.934029. On the frozen 1,994-query sample, it added seven true and zero false links after the US-address route, raising **0.929892→0.931181**. The archived name score is still unknown. `docs/Documentation_generalized_us_both.md` has a candidate-count placeholder until final packaging. The revised two-page `output/pdf/Vulcans_approach_summary_both.pdf` has been rendered and visually checked.
-5. **Finish if the name search completes:** run `python analysis/run_us_name_revision.py` from repository root. It validates all 237,217 name rows, merges onto the completed US-address **candidate set and uncapped raw results**, caps/owns, runs both validators, packages with compression level 9, and asserts <512,000,000 bytes before updating `output/final/`. It backs up the current verified US-address package at `output/final_us_address_verified/`. If the ZIP exceeds the limit, leave `output/final/` untouched and test a smaller name quota or gate using the complete retrieved top-10 TSV. This script is prepared but has not yet been run.
-   After preserving the verified name package, test **reverse target-to-Source-1 retrieval** on a label-free target sample with the actual matcher and full country Source 1 index. The positive-only upper bound in `docs/FINDINGS.md` is strong for the US, but it is not an F0.5 result. Measure false links and runtime before any full test-scale run; retain the verified package if the gain is small or the 512 MB budget fails.
-6. Submit `output/final/Vulcans_submission.zip` and `output/final/Vulcans_approach_summary.pdf` according to the portal instructions before **27 September 2026, 23:59 IST**. Check that each upload finishes and is accepted. The user said they will perform portal uploads. The public rank is time dependent and cannot be compared directly with the earlier rank.
+1. Upload the revised `matching_results.tsv` to check its public score. The user said they will perform portal uploads.
+2. Submit the verified ZIP and PDF before the deadline, and confirm the portal accepted both. If the revised TSV unexpectedly underperforms the previous public score, the complete 0.92817 package is in `output/final_us_address_verified/`.
+3. If time remains after securing an accepted submission, evaluate reverse address retrieval. A label-blind 5% US target sample gave only **+0.000174** full-development macro F0.5 after forward name retrieval (37 additional true, two false selected links). This is too narrow to justify replacing the verified files without an independent validation, final-size check, and another complete package verification. The reverse name slice gave just +0.000041 and was stopped.
 
-The submission uses supplied records and locally packaged models only. No external business lookup or remote inference was used. The repository is `https://github.com/yashdoke7/Amazon-ML-Challenge-26`; its source and compact evidence are pushed, while data and final artifacts remain local.
+## Rules and reproduction
+
+- No external business identity lookup, registry, map/geocoding API, external data augmentation, or remote inference on supplied record text. Local method research and locally packaged models are allowed under the problem statement's license/size conditions.
+- Submission needs one matching-results row and one final-candidate row for every test Source 1, including singletons. Every predicted match must appear in that query's final candidate list. ZIP also includes runnable code, dependencies, README, and filled methodology.
+- Data path: `6ab10eb3b23ba_student_resource/student_resource/dataset/`. It is ignored by Git. Do not commit supplied records, output TSVs, trained weights, or credentials.
+- The current pipeline uses a learned top-40 lexical blocker, India address top-20, gated US address top-5, gated US name top-10, a general LightGBM matcher, a blank-address specialist, and cap/owner resolution. See [FINDINGS.md](FINDINGS.md) and `docs/Documentation_generalized_us_both.md` for measured tradeoffs and exact method.

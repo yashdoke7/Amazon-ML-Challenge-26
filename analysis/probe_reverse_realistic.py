@@ -77,6 +77,8 @@ def main():
     parser.add_argument("--hash-mod", type=int, default=20)
     parser.add_argument("--hash-remainder", type=int, default=0)
     parser.add_argument("--top-n", type=int, default=1)
+    parser.add_argument("--field", choices=("both", "business_name", "business_address"),
+                        default="both")
     args = parser.parse_args()
     if args.hash_mod < 1 or not 0 <= args.hash_remainder < args.hash_mod:
         parser.error("Invalid hash sample")
@@ -102,12 +104,13 @@ def main():
             if row["country"] == args.country:
                 s1_rows.append(row)
     print("S1_INDEX", len(s1_rows), "dev_ids", len(dev_ids), flush=True)
-    pairs = ROOT / f"tmp/reverse_{args.country.lower()}_sample_{args.hash_remainder}_of_{args.hash_mod}_top{args.top_n}.tsv"
+    pairs = ROOT / f"tmp/reverse_{args.country.lower()}_sample_{args.hash_remainder}_of_{args.hash_mod}_top{args.top_n}_{args.field}.tsv"
     results = []
     with pairs.open("w", encoding="utf-8", newline="") as stream:
         writer = csv.writer(stream, delimiter="\t", lineterminator="\n")
         writer.writerow(["source1_entity_id", "target_id", "field", "rank", "cosine"])
-        for field in ("business_name", "business_address"):
+        fields = ("business_name", "business_address") if args.field == "both" else (args.field,)
+        for field in fields:
             rows = [r for r in target_rows if r[field]]
             result = route(field, rows, s1_rows, dev_ids, args.top_n, writer)
             results.append(result)
