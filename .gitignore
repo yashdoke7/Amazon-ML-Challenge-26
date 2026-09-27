@@ -8,6 +8,7 @@ output/*.zip
 output/*.log
 output/*.json
 output/final/
+output/final_*/
 *.parquet
 *.feather
 *.arrow

@@ -59,8 +59,8 @@ def sha256(path):
     return digest.hexdigest()
 
 
-def verify_extra(extra, gate):
-    if row_count(extra) != EXPECTED_US_EXTRA:
+def verify_extra(extra, gate, expected=EXPECTED_US_EXTRA, max_k=5):
+    if row_count(extra) != expected:
         raise ValueError("US retrieval output is partial; do not merge")
     with gate.open(encoding="utf-8") as gate_stream, \
          extra.open(encoding="utf-8", newline="") as extra_stream:
@@ -74,10 +74,10 @@ def verify_extra(extra, gate):
                 raise ValueError(f"US retrieval order mismatch at {count}")
             ids = row["candidate_entity_ids"].split(",") if row[
                 "candidate_entity_ids"] else []
-            if len(ids) > 5 or len(ids) != len(set(ids)):
+            if len(ids) > max_k or len(ids) != len(set(ids)):
                 raise ValueError(f"Invalid US candidate quota at {q}")
             count += 1
-        if count != EXPECTED_US_EXTRA or next(gate_stream, None) is not None or \
+        if count != expected or next(gate_stream, None) is not None or \
                 next(reader, None) is not None:
             raise ValueError("US retrieval/gate counts differ")
     print("verified US retrieval rows", count, flush=True)

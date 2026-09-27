@@ -25,7 +25,10 @@ def main():
     parser.add_argument("--candidate-path",type=Path)
     parser.add_argument("--doc-path",type=Path)
     parser.add_argument("--archive-path",type=Path)
+    parser.add_argument("--compresslevel",type=int,default=3)
     args=parser.parse_args()
+    if not 1 <= args.compresslevel <= 9:
+        parser.error("--compresslevel must be between 1 and 9")
     safe_name=re.sub(r"[^A-Za-z0-9_-]+","_",args.team_name.strip()).strip("_")
     if not safe_name:
         raise SystemExit("Provide the registered team name")
@@ -81,7 +84,8 @@ def main():
     archive=OUTPUT / f"{safe_name}{suffix}"
     if args.archive_path:
         archive=args.archive_path
-    with zipfile.ZipFile(archive,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=3,allowZip64=True) as bundle:
+    with zipfile.ZipFile(archive,"w",compression=zipfile.ZIP_DEFLATED,
+                         compresslevel=args.compresslevel,allowZip64=True) as bundle:
         bundle.write(matching,"output/matching_results.tsv")
         bundle.write(candidates,"output/candidate_pairs.tsv")
         for path in [PACKAGE / "README.md",PACKAGE / "requirements.txt",*models]+source_files:

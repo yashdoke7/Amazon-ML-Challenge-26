@@ -1,5 +1,6 @@
 """Create the separate two-page approach summary requested by Unstop."""
 
+import argparse
 from pathlib import Path
 
 from reportlab.lib import colors
@@ -33,8 +34,10 @@ def footer(canvas, doc):
     canvas.restoreState()
 
 
-def main():
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+def main(name_route=False):
+    output_path = (OUTPUT.with_name("Vulcans_approach_summary_both.pdf")
+                   if name_route else OUTPUT)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     styles = getSampleStyleSheet()
     styles.add(ParagraphStyle(
         name="TitleCustom", parent=styles["Title"], fontName="Helvetica-Bold",
@@ -94,10 +97,12 @@ def main():
         P("A frozen 23-feature LightGBM ranks the broad union and passes at most 40 candidates "
           "per Source 1. A local word TF-IDF search adds up to 20 IDs per India query. For US "
           "queries with at most three initial matches, a second exact sparse TF-IDF address "
-          "search adds up to five IDs. The recorded final candidate TSV is the union actually "
-          "scored. Top 40 retained 70,735/70,741 broad-reachable true links in development; "
-          "the India quota added 1,346 reachable links. No pretrained weights or external "
-          "data are used for these searches."),
+          "search adds up to five IDs. " +
+          ("A character 3-4-gram name TF-IDF search adds up to ten IDs for US queries with "
+           "at most two initial matches. " if name_route else "") +
+          "The recorded final candidate TSV is the union actually scored. Top 40 retained "
+          "70,735/70,741 broad-reachable true links in development; the India quota added "
+          "1,346 reachable links. No pretrained weights or external data are used for these searches."),
         P("A separate 35-feature Unicode/transliteration LightGBM was trained on 5.25 million "
           "pairs mined from 190,086 training-owned queries. A 36-feature specialist replaces "
           "its score for targets with empty addresses, using target core-name frequency. "
@@ -116,6 +121,9 @@ def main():
           "F0.5 on development and separate frozen validation."),
         B("The gated US top-five address route added 28 true links and zero false links on "
           "frozen validation; the same final matcher scored every added pair."),
+        *([B("The gated US top-ten character-name route added another seven true links and "
+             "zero false links after the US address route on frozen validation.")]
+          if name_route else []),
         PageBreak(),
         Paragraph("Measured evidence and submission", styles["TitleCustom"]),
         Paragraph("All scores below are local macro F0.5; public and private leaderboard scores "
@@ -136,6 +144,9 @@ def main():
         ["Plus India address top 20", "Frozen 1,994-query validation", "0.92752"],
         ["Plus gated US address top 5", "Frozen 1,994-query validation", "0.92989"],
     ]
+    if name_route:
+        table_data.append(["Plus gated US name top 10", "Frozen 1,994-query validation",
+                           "0.93118"])
     table = Table(table_data, colWidths=[2.08 * inch, 2.32 * inch, 1.48 * inch], repeatRows=1)
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), NAVY),
@@ -152,8 +163,9 @@ def main():
         B("The candidate oracle assumes perfect scoring on retrieved pairs. It measures the "
           "retrieval ceiling, not an achieved model score."),
         B("The learned top-40 block controls most candidate volume. India address top 20 "
-          "raised frozen macro F0.5 by 0.00907; gated US address top 5 added 0.00237. "
-          "Both quotas were measured before full test inference."),
+          "raised frozen macro F0.5 by 0.00907; gated US address top 5 added 0.00237. " +
+          ("Gated US character-name top 10 added 0.00129. " if name_route else "") +
+          "Every quota was measured before full test inference."),
         B("The general matcher compares original Unicode and local ASCII-transliterated "
           "name/address views, plus soft number agreement. The blank-address specialist "
           "uses locally computed core-name rarity. No French labels guided either model."),
@@ -170,14 +182,17 @@ def main():
         P("Yash Kailas Doke, Harsh Jitendra Jain, Ayush Tiwari, and Vedant Kaulgekar."),
     ]
     document = SimpleDocTemplate(
-        str(OUTPUT), pagesize=A4, leftMargin=0.58 * inch,
+        str(output_path), pagesize=A4, leftMargin=0.58 * inch,
         rightMargin=0.58 * inch, topMargin=0.62 * inch,
         bottomMargin=0.67 * inch, title="Vulcans - Amazon ML Challenge 2026 Approach",
         author="Team Vulcans",
     )
     document.build(story, onFirstPage=footer, onLaterPages=footer)
-    print(OUTPUT)
+    print(output_path)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--name-route", action="store_true")
+    args = parser.parse_args()
+    main(args.name_route)
