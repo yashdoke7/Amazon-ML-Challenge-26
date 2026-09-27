@@ -1,8 +1,8 @@
-"""Score bounded address-retrieved India pairs and merge with top-40 results.
+"""Score bounded same-country address pairs and merge with base results.
 
 The output candidate TSV is the exact union passed to the final matcher.
-Rows from the base two-stage scorer and the India-only address TSV must follow
-the Source 1 input order; this is checked rather than inferred from IDs.
+Rows from the base scorer and address TSV must follow Source 1 input order;
+this is checked rather than inferred from IDs. A sparse extra may omit queries.
 """
 
 import argparse
@@ -24,7 +24,8 @@ from rescore_candidates import featurize_rows
 
 
 def process_batch(con, matcher, specialist, pool, batch,
-                  candidate_writer, match_writer, blank_threshold):
+                  candidate_writer, match_writer, blank_threshold,
+                  country="India", general_threshold=0.65):
     queries = {q["entity_id"]: q for q, _, _, _ in batch}
     pairs = []
     for q, base, _, extra in batch:
@@ -42,8 +43,8 @@ def process_batch(con, matcher, specialist, pool, batch,
             FROM address_pairs p JOIN target t USING(target_id)
             LEFT JOIN blank_target_frequency f USING(target_id)""").df()
         con.unregister("address_pairs")
-        if len(frame) != len(pairs) or not frame.target_country.eq("India").all():
-            raise ValueError("Address target missing or outside India")
+        if len(frame) != len(pairs) or not frame.target_country.eq(country).all():
+            raise ValueError(f"Address target missing or outside {country}")
         feature_rows = [(queries[row.s1_id]["business_name"], row.t_name,
                          queries[row.s1_id]["business_address"], row.t_address,
                          row.target_source) for row in frame.itertuples(index=False)]
@@ -61,7 +62,7 @@ def process_batch(con, matcher, specialist, pool, batch,
             special_features[:, :35] = features[blank]
             special_features[:, 35] = np.log1p(frequencies.to_numpy(dtype=np.float32))
             probabilities[blank] = specialist.predict_proba(special_features)[:, 1]
-        thresholds = np.where(blank, blank_threshold, 0.65)
+        thresholds = np.where(blank, blank_threshold, general_threshold)
         for (s1, target), keep in zip(frame[["s1_id", "target_id"]].itertuples(
                 index=False, name=None), probabilities >= thresholds):
             if keep:
@@ -75,7 +76,8 @@ def process_batch(con, matcher, specialist, pool, batch,
 
 def run(data_dir, db_path, base_candidate, base_matching, extra_path,
         candidate_path, matching_path, matcher_path, specialist_path,
-        query_ids=None, workers=4, batch_size=5000, blank_threshold=0.8):
+        query_ids=None, workers=4, batch_size=5000, blank_threshold=0.8,
+        country="India", general_threshold=0.65, sparse_extra=False):
     paths = [base_candidate, base_matching, extra_path, candidate_path, matching_path]
     if len({p.resolve() for p in paths}) != len(paths):
         raise ValueError("Input and output paths must be distinct")
@@ -123,12 +125,14 @@ def run(data_dir, db_path, base_candidate, base_matching, extra_path,
             if s1 != base["source1_entity_id"] or s1 != raw["source1_entity_id"]:
                 raise ValueError("Base rows differ from Source 1 order")
             extra = []
-            if q["country"] == "India":
-                if next_extra is None or next_extra["source1_entity_id"] != s1:
-                    raise ValueError("India address row differs from Source 1 order")
-                extra = next_extra["candidate_entity_ids"].split(",") if next_extra[
-                    "candidate_entity_ids"] else []
-                next_extra = next(extras, None)
+            if q["country"] == country:
+                if not sparse_extra or (next_extra is not None and
+                                        next_extra["source1_entity_id"] == s1):
+                    if next_extra is None or next_extra["source1_entity_id"] != s1:
+                        raise ValueError(f"{country} address row differs from Source 1 order")
+                    extra = next_extra["candidate_entity_ids"].split(",") if next_extra[
+                        "candidate_entity_ids"] else []
+                    next_extra = next(extras, None)
             base_ids = base["candidate_entity_ids"].split(",") if base[
                 "candidate_entity_ids"] else []
             raw_ids = raw["matched_entity_ids"].split(",") if raw[
@@ -139,7 +143,8 @@ def run(data_dir, db_path, base_candidate, base_matching, extra_path,
             if len(batch) >= batch_size:
                 n_pairs, n_selected = process_batch(
                     con, matcher, specialist, pool, batch,
-                    candidate_writer, match_writer, blank_threshold)
+                    candidate_writer, match_writer, blank_threshold,
+                    country, general_threshold)
                 total_queries += len(batch)
                 total_pairs += n_pairs
                 total_selected += n_selected
@@ -151,12 +156,13 @@ def run(data_dir, db_path, base_candidate, base_matching, extra_path,
         if batch:
             n_pairs, n_selected = process_batch(
                 con, matcher, specialist, pool, batch,
-                candidate_writer, match_writer, blank_threshold)
+                candidate_writer, match_writer, blank_threshold,
+                country, general_threshold)
             total_queries += len(batch)
             total_pairs += n_pairs
             total_selected += n_selected
         if next_extra is not None:
-            raise ValueError("Unused India address rows")
+            raise ValueError(f"Unused {country} address rows")
     con.close()
     print("COMPLETE", total_queries, total_pairs, total_selected,
           "seconds", round(time.perf_counter()-started, 1), flush=True)
@@ -177,10 +183,14 @@ if __name__ == "__main__":
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--batch-size", type=int, default=5000)
     parser.add_argument("--blank-threshold", type=float, default=0.8)
+    parser.add_argument("--country", default="India")
+    parser.add_argument("--general-threshold", type=float, default=0.65)
+    parser.add_argument("--sparse-extra", action="store_true")
     args = parser.parse_args()
     run(args.data_dir, args.db, args.base_candidate, args.base_matching,
         args.extra, args.candidate, args.matching, args.model,
         args.blank_specialist,
         set(args.query_ids.read_text(encoding="utf-8").splitlines())
         if args.query_ids else None,
-        args.workers, args.batch_size, args.blank_threshold)
+        args.workers, args.batch_size, args.blank_threshold,
+        args.country, args.general_threshold, args.sparse_extra)

@@ -21,6 +21,10 @@ def main():
     parser.add_argument("--team-name",required=True)
     parser.add_argument("--check-ids",action="store_true")
     parser.add_argument("--variant",choices=["baseline","number","compact_number","compact_generalized"],default="baseline")
+    parser.add_argument("--matching-path",type=Path)
+    parser.add_argument("--candidate-path",type=Path)
+    parser.add_argument("--doc-path",type=Path)
+    parser.add_argument("--archive-path",type=Path)
     args=parser.parse_args()
     safe_name=re.sub(r"[^A-Za-z0-9_-]+","_",args.team_name.strip()).strip("_")
     if not safe_name:
@@ -32,6 +36,8 @@ def main():
          ROOT / "docs" / "Documentation_compact_number.md" if is_compact else
          ROOT / "docs" / "Documentation_number_model.md" if is_number else
          ROOT / "Documentation_template.md")
+    if args.doc_path:
+        doc=args.doc_path
     if not doc.is_file():
         raise SystemExit(f"Missing methodology document: {doc}")
     content=doc.read_text(encoding="utf-8")
@@ -43,6 +49,10 @@ def main():
                        "number_results.tsv" if is_number else "matching_results.tsv")
     candidates=OUTPUT / ("generalized_compact_candidate_pairs.tsv" if is_generalized else
                          "compact_candidate_pairs.tsv" if is_compact else "candidate_pairs.tsv")
+    if args.matching_path:
+        matching=args.matching_path
+    if args.candidate_path:
+        candidates=args.candidate_path
     verify(RESOURCE / "dataset" / "test",matching,candidates)
     # The supplied validator retains every candidate ID in Python sets and
     # exceeds this machine's RAM at full scale. The streaming check above
@@ -69,6 +79,8 @@ def main():
             "_compact_submission.zip" if is_compact else
             "_number_submission.zip" if is_number else "_submission.zip")
     archive=OUTPUT / f"{safe_name}{suffix}"
+    if args.archive_path:
+        archive=args.archive_path
     with zipfile.ZipFile(archive,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=3,allowZip64=True) as bundle:
         bundle.write(matching,"output/matching_results.tsv")
         bundle.write(candidates,"output/candidate_pairs.tsv")
