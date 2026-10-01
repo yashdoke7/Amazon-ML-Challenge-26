@@ -1,83 +1,110 @@
-# Amazon ML Challenge 2026 entity resolution
+# Vulcans business entity resolution submission
 
-This package generates both required test TSVs using the supplied data and a bundled LightGBM matcher. The model in `model.joblib` was trained locally on the supplied training TSVs. It uses 23 local string/number/source features; it makes no network calls. LightGBM 4.5.0 is MIT licensed. See `src/train.py` to regenerate model weights from the supplied training set.
+This directory reproduces the final Vulcans pipeline for Amazon ML Challenge 2026 from the organiser-supplied data. It creates the two required files:
 
-## Selected Unicode-aware compact variant and gated US address revision
+* `output/matching_results.tsv` — final matches.
+* `output/candidate_pairs.tsv` — exact last-stage candidate set scored by the final matcher.
 
-The selected variant uses `model.joblib` only as a learned top-40 candidate ranker. A separate local word TF-IDF search over every distinct nonempty India target address adds up to 20 target IDs per India query after that top-40 stage. The revised route also searches US addresses for US queries with at most three initial matches, adding up to five target IDs. A character 3-4-gram TF-IDF search over US names adds up to ten IDs for US queries with at most two initial matches. Both use local Apache-2.0 `sparse-dot-topn` multiplication. Each vocabulary is fit anew from the supplied target records; there are no pretrained weights or external data. The separate `generalized_model.joblib` is the 35-feature final matcher, trained locally from 190,086 sampled training-owned Source 1 queries (a requested 200,000 sample). It retained all 600,773 reachable positive pairs plus 20 model-mined hard negatives and up to five random negatives per query, for 5,246,815 training rows. `generalized_seed_model.joblib` is the earlier 20,000-query 35-feature model used to mine those negatives; it is bundled for training reconstruction. The Unicode features compare local ASCII-transliterated name/address views while preserving original text. `anyascii==0.3.3` is pinned; there is no external identity lookup or remote model call. The development-selected general thresholds are **0.65 for India and 0.75 for other countries**, including unlabeled France. A small `blank_frequency_model.joblib` specialist scores only targets whose address is empty, using the same 35 features plus log frequency of the target's normalized core name across the supplied target index. It was trained from a seeded 5,000-query sample (4,750 training-owned queries, 13,634 blank-address candidate pairs, 590 positives) and uses a development-selected threshold of **0.80**. The cap of 11 and exclusive-owner pass follow matching.
+The checked-in TSVs in the archive are the exact files used for submission. The pipeline uses only the supplied data, bundled locally trained models, and local Python packages. It does not make network requests or use external business data.
 
-From `student_resource/`, the exact end-to-end reconstruction is:
+## 1. Setup
+
+Extract the archive next to the organiser's `dataset/` and `utils/` directories, so the working directory has this layout:
+
+```text
+student_resource/
+  dataset/train/ and dataset/test/
+  utils/validate_submission.py
+  code/business_entity_resolution/
+  output/
+```
+
+Python 3.11, 32 GB RAM, and a local SSD were used. CPU is sufficient; this route does not require a GPU. From `student_resource/`:
 
 ```powershell
 python -m pip install -r code/business_entity_resolution/requirements.txt
+New-Item -ItemType Directory -Force output | Out-Null
 python code/business_entity_resolution/src/build_index.py --data-dir dataset/test --db test_index.duckdb
+```
+
+`build_index.py` creates a local DuckDB index over Sources 2 and 3, including normalised fields and name frequencies. The code sets a 20 GB DuckDB limit. The full process can take many hours and creates temporary local indexes; these are not required in the final archive.
+
+## 2. Final inference route
+
+Run the following commands in order. Intermediate files are intentionally retained because each later route merges into the candidate set from the preceding route.
+
+### Core lexical candidates and learned top-40 block
+
+```powershell
 python code/business_entity_resolution/src/infer.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/model.joblib --output-dir output --batch-size 5000 --threshold 0.65
 Move-Item output/candidate_pairs.tsv output/broad_candidate_pairs.tsv
 python code/business_entity_resolution/src/two_stage_rescore.py --data-dir dataset/test --db test_index.duckdb --broad-candidate output/broad_candidate_pairs.tsv --candidate output/base_candidate_pairs.tsv --matching output/base_raw.tsv --matcher-model code/business_entity_resolution/generalized_model.joblib --blank-specialist-model code/business_entity_resolution/blank_frequency_model.joblib --blank-threshold 0.80 --threshold 0.75 --country-threshold India:0.65 --top-k 40 --workers 4
-python code/business_entity_resolution/src/address_tfidf_retrieval.py --data-dir dataset/test --output output/india_address_candidates.tsv --top-k 20
-python code/business_entity_resolution/src/merge_address_candidates.py --data-dir dataset/test --db test_index.duckdb --base-candidate output/base_candidate_pairs.tsv --base-matching output/base_raw.tsv --extra output/india_address_candidates.tsv --candidate output/candidate_pairs.tsv --matching output/generalized_raw.tsv --model code/business_entity_resolution/generalized_model.joblib --blank-specialist code/business_entity_resolution/blank_frequency_model.joblib --workers 4
-python code/business_entity_resolution/src/cap_predictions.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/generalized_raw.tsv --output output/generalized_capped.tsv --cap 11
-python code/business_entity_resolution/src/resolve_exclusivity.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/generalized_capped.tsv --output output/matching_results.tsv
-python code/business_entity_resolution/src/stream_validate.py --matching output/matching_results.tsv --candidate output/candidate_pairs.tsv --test-dir dataset/test
-python utils/validate_submission.py --matching output/matching_results.tsv --candidate output/__no_candidates__.tsv --test-dir dataset/test --check-ids
 ```
 
-The commands above reconstruct the India-only predecessor. To reproduce the gated US-address revision, run the following from its completed India-only outputs. The low-coverage gate depends only on that predecessor's predictions; it does not inspect test labels. Its selection and the same-country TF-IDF search are local and deterministic. Keep the predecessor files at distinct paths before writing the revised outputs:
+`infer.py` makes a broad same-country lexical pool. `two_stage_rescore.py` uses `model.joblib` only as a ranker and retains the top 40 candidates per Source 1 record. The general matcher and blank-address specialist then score this retained set.
+
+### India word-address retrieval
+
+```powershell
+python code/business_entity_resolution/src/address_tfidf_retrieval.py --data-dir dataset/test --output output/india_address_candidates.tsv --top-k 20
+python code/business_entity_resolution/src/merge_address_candidates.py --data-dir dataset/test --db test_index.duckdb --base-candidate output/base_candidate_pairs.tsv --base-matching output/base_raw.tsv --extra output/india_address_candidates.tsv --candidate output/candidate_pairs.tsv --matching output/india_raw.tsv --model code/business_entity_resolution/generalized_model.joblib --blank-specialist code/business_entity_resolution/blank_frequency_model.joblib --workers 4
+python code/business_entity_resolution/src/cap_predictions.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/india_raw.tsv --output output/india_capped.tsv --cap 11
+python code/business_entity_resolution/src/resolve_exclusivity.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/india_capped.tsv --output output/india_final.tsv
+```
+
+### Gated US word-address retrieval
 
 ```powershell
 Copy-Item output/candidate_pairs.tsv output/india_candidate_pairs.tsv
-Copy-Item output/generalized_raw.tsv output/india_raw.tsv
-Copy-Item output/matching_results.tsv output/india_final.tsv
+Copy-Item output/india_raw.tsv output/india_raw_saved.tsv
 python code/business_entity_resolution/src/select_retrieval_queries.py --data-dir dataset/test --matching output/india_final.tsv --output output/us_query_ids.txt --country US --max-matches 3
 python code/business_entity_resolution/src/address_tfidf_retrieval.py --data-dir dataset/test --output output/us_address_candidates.tsv --country US --top-k 5 --batch-size 200 --query-ids output/us_query_ids.txt --sparse-topn --search-threads 8
-python code/business_entity_resolution/src/merge_address_candidates.py --data-dir dataset/test --db test_index.duckdb --base-candidate output/india_candidate_pairs.tsv --base-matching output/india_raw.tsv --extra output/us_address_candidates.tsv --candidate output/candidate_pairs.tsv --matching output/us_raw.tsv --model code/business_entity_resolution/generalized_model.joblib --blank-specialist code/business_entity_resolution/blank_frequency_model.joblib --country US --general-threshold 0.75 --blank-threshold 0.80 --sparse-extra --workers 4
+python code/business_entity_resolution/src/merge_address_candidates.py --data-dir dataset/test --db test_index.duckdb --base-candidate output/india_candidate_pairs.tsv --base-matching output/india_raw_saved.tsv --extra output/us_address_candidates.tsv --candidate output/candidate_pairs.tsv --matching output/us_raw.tsv --model code/business_entity_resolution/generalized_model.joblib --blank-specialist code/business_entity_resolution/blank_frequency_model.joblib --country US --general-threshold 0.75 --blank-threshold 0.80 --sparse-extra --workers 4
 python code/business_entity_resolution/src/cap_predictions.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/us_raw.tsv --output output/us_capped.tsv --cap 11
-python code/business_entity_resolution/src/resolve_exclusivity.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/us_capped.tsv --output output/matching_results.tsv
-python code/business_entity_resolution/src/stream_validate.py --matching output/matching_results.tsv --candidate output/candidate_pairs.tsv --test-dir dataset/test
-python utils/validate_submission.py --matching output/matching_results.tsv --candidate output/__no_candidates__.tsv --test-dir dataset/test --check-ids
+python code/business_entity_resolution/src/resolve_exclusivity.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/us_capped.tsv --output output/us_final.tsv
 ```
 
-To reconstruct the final address-plus-name revision, run the following from the completed address-revision outputs above. `india_final.tsv` was saved before the US-address route and fixes the independent two-match name gate. The name index uses only supplied US target names, local ASCII transliteration, and character 3-4-gram TF-IDF. It is rebuilt at inference time; its top-ten quota is scored by the same matcher. Keep the prior address candidate/raw files before writing the final outputs:
+### Gated US character-name retrieval
 
 ```powershell
 Copy-Item output/candidate_pairs.tsv output/us_address_candidate_pairs.tsv
-Copy-Item output/us_raw.tsv output/us_address_raw.tsv
+Copy-Item output/us_raw.tsv output/us_address_raw_saved.tsv
 python code/business_entity_resolution/src/select_retrieval_queries.py --data-dir dataset/test --matching output/india_final.tsv --output output/us_name_query_ids.txt --country US --max-matches 2
 python code/business_entity_resolution/src/address_tfidf_retrieval.py --data-dir dataset/test --output output/us_name_candidates.tsv --country US --name-mode --top-k 10 --batch-size 200 --query-ids output/us_name_query_ids.txt --sparse-topn --search-threads 8
-python code/business_entity_resolution/src/merge_address_candidates.py --data-dir dataset/test --db test_index.duckdb --base-candidate output/us_address_candidate_pairs.tsv --base-matching output/us_address_raw.tsv --extra output/us_name_candidates.tsv --candidate output/candidate_pairs.tsv --matching output/us_both_raw.tsv --model code/business_entity_resolution/generalized_model.joblib --blank-specialist code/business_entity_resolution/blank_frequency_model.joblib --country US --general-threshold 0.75 --blank-threshold 0.80 --sparse-extra --workers 4
-python code/business_entity_resolution/src/cap_predictions.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/us_both_raw.tsv --output output/us_both_capped.tsv --cap 11
-python code/business_entity_resolution/src/resolve_exclusivity.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/us_both_capped.tsv --output output/matching_results.tsv
-python code/business_entity_resolution/src/stream_validate.py --matching output/matching_results.tsv --candidate output/candidate_pairs.tsv --test-dir dataset/test
-python utils/validate_submission.py --matching output/matching_results.tsv --candidate output/__no_candidates__.tsv --test-dir dataset/test --check-ids
+python code/business_entity_resolution/src/merge_address_candidates.py --data-dir dataset/test --db test_index.duckdb --base-candidate output/us_address_candidate_pairs.tsv --base-matching output/us_address_raw_saved.tsv --extra output/us_name_candidates.tsv --candidate output/candidate_pairs.tsv --matching output/us_both_raw.tsv --model code/business_entity_resolution/generalized_model.joblib --blank-specialist code/business_entity_resolution/blank_frequency_model.joblib --country US --general-threshold 0.75 --blank-threshold 0.80 --sparse-extra --workers 4
 ```
 
-The additional US character-address route uses a 120,000-feature character 3-4-gram TF-IDF address index built from supplied test targets. A sparse product of each query's 16 strongest character terms retrieves up to 300 address keys, which are reranked with full-vector cosine; at most ten target IDs are passed to the existing final matcher. From the completed address-plus-name outputs above, run:
+### US character-address and India character-name retrieval
 
 ```powershell
 Copy-Item output/candidate_pairs.tsv output/us_both_candidate_pairs.tsv
 Copy-Item output/us_both_raw.tsv output/us_both_raw_saved.tsv
 python code/business_entity_resolution/src/char_address_retrieval.py --data-dir dataset/test --split test --country US --field business_address --top-k 10 --term-limit 16 --shortlist 300 --output output/us_char_address_candidates.tsv
 python code/business_entity_resolution/src/merge_address_candidates.py --data-dir dataset/test --db test_index.duckdb --base-candidate output/us_both_candidate_pairs.tsv --base-matching output/us_both_raw_saved.tsv --extra output/us_char_address_candidates.tsv --candidate output/candidate_pairs.tsv --matching output/us_char_raw.tsv --model code/business_entity_resolution/generalized_model.joblib --blank-specialist code/business_entity_resolution/blank_frequency_model.joblib --country US --general-threshold 0.75 --blank-threshold 0.80 --sparse-extra --workers 4
-python code/business_entity_resolution/src/cap_predictions.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/us_char_raw.tsv --output output/us_char_capped.tsv --cap 11
-python code/business_entity_resolution/src/resolve_exclusivity.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/us_char_capped.tsv --output output/matching_results.tsv
-python code/business_entity_resolution/src/stream_validate.py --matching output/matching_results.tsv --candidate output/candidate_pairs.tsv --test-dir dataset/test
-python utils/validate_submission.py --matching output/matching_results.tsv --candidate output/__no_candidates__.tsv --test-dir dataset/test --check-ids
-```
-
-The final bounded India name route follows the US character-address pass. Keep its candidate and uncapped raw files before the India merge:
-
-```powershell
 Copy-Item output/candidate_pairs.tsv output/us_char_candidate_pairs.tsv
 Copy-Item output/us_char_raw.tsv output/us_char_raw_saved.tsv
 python code/business_entity_resolution/src/char_address_retrieval.py --data-dir dataset/test --split test --country India --field business_name --top-k 5 --term-limit 16 --shortlist 300 --output output/india_char_name_candidates.tsv
 python code/business_entity_resolution/src/merge_address_candidates.py --data-dir dataset/test --db test_index.duckdb --base-candidate output/us_char_candidate_pairs.tsv --base-matching output/us_char_raw_saved.tsv --extra output/india_char_name_candidates.tsv --candidate output/candidate_pairs.tsv --matching output/combined_char_raw.tsv --model code/business_entity_resolution/generalized_model.joblib --blank-specialist code/business_entity_resolution/blank_frequency_model.joblib --country India --general-threshold 0.65 --blank-threshold 0.80 --sparse-extra --workers 4
 python code/business_entity_resolution/src/cap_predictions.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/combined_char_raw.tsv --output output/combined_char_capped.tsv --cap 11
 python code/business_entity_resolution/src/resolve_exclusivity.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/generalized_model.joblib --input output/combined_char_capped.tsv --output output/matching_results.tsv
+```
+
+The candidate file is the union of the learned top-40 candidates and all accepted TF-IDF additions. The cap limits a predicted Source 1 group to 11 records. Exclusive-owner resolution assigns a target to the highest-scoring Source 1 prediction.
+
+## 3. Validation
+
+The submission-specific streaming validator checks row coverage, IDs, and that every final match belongs to the same row's candidate set without loading the whole candidate TSV into RAM:
+
+```powershell
 python code/business_entity_resolution/src/stream_validate.py --matching output/matching_results.tsv --candidate output/candidate_pairs.tsv --test-dir dataset/test
 python utils/validate_submission.py --matching output/matching_results.tsv --candidate output/__no_candidates__.tsv --test-dir dataset/test --check-ids
 ```
 
-The broad lexical intermediate and TF-IDF indexes can be regenerated. `output/candidate_pairs.tsv` is the exact union of top-40 learned candidates, up to 20 India word-address IDs, up to five gated US word-address IDs, up to ten gated US character-name IDs, up to ten US character-address IDs, and up to five India character-name IDs passed to the final matcher; the broad TSV is not submitted. The supplied validator's candidate check exceeds 32 GB RAM at full scale, so `stream_validate.py` checks every row and the candidate subset relation in bounded memory, while the supplied validator checks match ID existence. The bundled weights reproduce the submitted inference exactly. To rebuild the matcher from supplied labels, first build the train index, then run:
+The organiser's full candidate check can require more than 32 GB RAM at this scale. `stream_validate.py` performs the candidate-subset check in bounded memory; the organiser validator command above checks matching-file IDs and format.
+
+## 4. Rebuilding models
+
+Bundled model files reproduce the submitted route. To rebuild the two final models from the supplied labels, first build the training index, then run:
 
 ```powershell
 python code/business_entity_resolution/src/build_index.py --data-dir dataset/train --db train_index.duckdb
@@ -85,78 +112,4 @@ python code/business_entity_resolution/src/train_hard_negative.py --data-dir dat
 python code/business_entity_resolution/src/train_blank_frequency.py --data-dir dataset/train --db train_index.duckdb --model-out code/business_entity_resolution/blank_frequency_rebuilt.joblib --summary-out output/blank_frequency_training_summary.json --sample-size 5000
 ```
 
-The methodology in `Documentation_template.md` records the measured development/validation comparisons and the French uncertainty.
-
-## Inputs and environment
-
-Expected layout, relative to `student_resource/`:
-
-```text
-dataset/train/train_source1.tsv
-dataset/train/train_source2.tsv
-dataset/train/train_source3.tsv
-dataset/train/train_ground_truth.tsv
-dataset/test/test_source1.tsv
-dataset/test/test_source2.tsv
-dataset/test/test_source3.tsv
-```
-
-Python 3.11 was used locally. Install `requirements.txt` into a clean environment. The tested machine has 32 GB RAM and a local SSD; `src/build_index.py` sets a 20 GB DuckDB limit and the full test outputs can take several GB. The test index can be rebuilt after interruption; its stages are marked in `index_meta`.
-
-From `student_resource/`, with `code/business_entity_resolution` copied into place:
-
-```powershell
-python -m pip install -r code/business_entity_resolution/requirements.txt
-python code/business_entity_resolution/src/build_index.py --data-dir dataset/test --db test_index.duckdb
-python code/business_entity_resolution/src/infer.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/model.joblib --output-dir output --batch-size 5000 --threshold 0.65
-Move-Item output/matching_results.tsv output/matching_results_uncapped.tsv
-python code/business_entity_resolution/src/cap_predictions.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/model.joblib --input output/matching_results_uncapped.tsv --output output/matching_results_capped.tsv --cap 11
-python code/business_entity_resolution/src/resolve_exclusivity.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/model.joblib --input output/matching_results_capped.tsv --output output/matching_results_owned.tsv
-python code/business_entity_resolution/src/veto_nearby_number.py --data-dir dataset/test --db test_index.duckdb --input output/matching_results_owned.tsv --output output/matching_results.tsv
-python code/business_entity_resolution/src/stream_validate.py --matching output/matching_results.tsv --candidate output/candidate_pairs.tsv --test-dir dataset/test
-python utils/validate_submission.py --matching output/matching_results.tsv --candidate output/__no_candidates__.tsv --test-dir dataset/test --check-ids
-```
-
-Inference writes one row per test Source 1 entity, including empty match/candidate lists. The final matches are always drawn from that row's last-stage candidate set. If inference stops between complete batches, rerun the same inference command with `--resume`; it checks that both output files have matching row IDs before appending. If a process stopped during the write of one batch, repair or discard that partial batch first. Apply the cap, exclusive-owner resolution, and US number-consistency pass only after inference finishes. The supplied validator holds all candidate IDs in memory and is too large for this machine at full scale; the streaming validator checks both files and their subset relation, while the supplied validator checks final match ID existence.
-
-`src/rescore_candidates.py` can apply a different compatible 23- or 27-feature model to the saved `candidate_pairs.tsv` without rebuilding the index or rerunning retrieval. The optional `number_model.joblib` has 27 features and uses threshold 0.75; for that model apply the cap and exclusive-owner passes but omit `veto_nearby_number.py`. Its optional `--workers 4` uses four CPU processes for exact string features. On a 1,000-query baseline slice, four workers took 4.4 seconds versus 7.9 seconds serially, with identical output; a full rescore still takes hours and needs a separate output path. The current pipeline does not use the GPU.
-
-To generate the optional variant after the baseline output is safely preserved, use separate result paths:
-
-```powershell
-python code/business_entity_resolution/src/rescore_candidates.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/number_model.joblib --candidate output/candidate_pairs.tsv --output output/number_results_uncapped.tsv --threshold 0.75 --country-threshold India:0.65 --workers 4
-python code/business_entity_resolution/src/cap_predictions.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/number_model.joblib --input output/number_results_uncapped.tsv --output output/number_results_capped.tsv --cap 11
-python code/business_entity_resolution/src/resolve_exclusivity.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/number_model.joblib --input output/number_results_capped.tsv --output output/number_results.tsv
-```
-
-The repository packager uses the same `candidate_pairs.tsv` for both versions. `python analysis/package_submission.py --team-name Vulcans --check-ids` builds the baseline archive; add `--variant number` to build the separate 27-feature archive with its matching methodology and both required model weights. Submit the version with the stronger measured public score, and give the chosen final archive the organizer's required `<team_name>_submission.zip` name.
-
-## Compact learned block for the 512 MB portal limit
-
-The team observed a 512 MB ZIP upload limit. The broad `output/candidate_pairs.tsv` has 353,929,494 test pairs and makes the original ZIP 2.02 GB. To create a truthful smaller last-stage candidate set, run a **separate frozen 23-feature LightGBM model as a ranking/blocking stage** on the broad lexical union. The top 40 pairs per Source 1, ordered by ranker probability then target ID, are written to `output/compact_candidate_pairs.tsv`. Only those pairs pass to the distinct 27-feature final matching model. The broad file is a regenerable intermediate; the compact file is the candidate set audited with the final matcher. This design retained 70,735/70,741 broad-pool true links and all final selected links on the complete 22,133-query development split; it kept all broad-pool true links on the two separately sampled 2,000-query development and validation sets. France remains unlabeled.
-
-Starting from the broad intermediate produced by `src/infer.py` (the baseline postprocessors are unnecessary for this variant), run:
-
-```powershell
-python code/business_entity_resolution/src/two_stage_rescore.py --data-dir dataset/test --db test_index.duckdb --broad-candidate output/candidate_pairs.tsv --candidate output/compact_candidate_pairs.tsv --matching output/compact_number_results_uncapped.tsv --top-k 40 --workers 4 --country-threshold India:0.65
-python code/business_entity_resolution/src/cap_predictions.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/number_model.joblib --input output/compact_number_results_uncapped.tsv --output output/compact_number_results_capped.tsv --cap 11
-python code/business_entity_resolution/src/resolve_exclusivity.py --data-dir dataset/test --db test_index.duckdb --model code/business_entity_resolution/number_model.joblib --input output/compact_number_results_capped.tsv --output output/compact_number_results.tsv
-python code/business_entity_resolution/src/stream_validate.py --matching output/compact_number_results.tsv --candidate output/compact_candidate_pairs.tsv --test-dir dataset/test
-python analysis/package_submission.py --team-name Vulcans --check-ids --variant compact_number
-```
-
-The compact packager maps these two output TSVs to the required archive paths `output/matching_results.tsv` and `output/candidate_pairs.tsv`. Confirm the final ZIP is under the portal's 512 MB limit before uploading. The public leaderboard accepts the standalone `compact_number_results.tsv` under its required filename `matching_results.tsv`; rename a copy for that upload without modifying the verified source file.
-
-## Method and reproducibility
-
-The index stores Source 2/3 records, Unicode letter/digit token postings with target document frequencies, and compact legal-suffix name keys. For each Source 1, three rare name tokens and three rare address tokens (frequency at most 3,000, minimum length four) form an initial pool. A name or address Jaro-Winkler top 100 quota is applied separately. Exact compact core-name and accent-folded core-name matches are then unioned in. India queries get an additional top 50 normalized address-token overlap route when at least two address tokens overlap. All routes use equal country only; any country label is allowed. Each resulting pair receives 23 features and the bundled LightGBM model predicts a link above threshold 0.65. A separate pass caps anomalously large predicted groups at the 11 highest model scores. The largest true group in the entire supplied training set was 11; the cap did not affect any of the 2,000 sampled validation queries. It mainly addresses generic French names, for which test labels are unavailable. A later pass enforces one predicted Source 1 owner per target, selecting the owner with the highest pair score; this follows the supplied training-label structure. Finally, for a US query that has a selected link at its exact leading address number, selected links whose leading number differs by 1–10 are removed. The latter conservative rule was measured on full development and a separate validation sample; it does not alter India or unlabeled France.
-
-To rebuild `model.joblib` from the supplied training data, first index `dataset/train`, then train on the seeded 5,000 Source 1 sample. Training excludes negative pairs whose target belongs to a held-out Source 1. The deterministic entity split and local score are in `src/validation.py`.
-
-```powershell
-python code/business_entity_resolution/src/build_index.py --data-dir dataset/train --db train_index.duckdb
-python code/business_entity_resolution/src/train.py --data-dir dataset/train --db train_index.duckdb --model-out code/business_entity_resolution/model_rebuilt.joblib
-python code/business_entity_resolution/src/train.py --data-dir dataset/train --db train_index.duckdb --model-out code/business_entity_resolution/number_model_rebuilt.joblib --sample-size 20000 --number-features
-```
-
-The bundled weights are the frozen tested model. Rebuilt weights can differ slightly with library/hardware ordering, so use the bundled model for exact output reproduction. Threshold 0.65 is provisional from the local development/validation experiments recorded in the repository's `docs/FINDINGS.md`.
+The generated weights can differ slightly across platforms; the bundled frozen models are included for exact reproduction of the submitted files.

@@ -7,4 +7,5 @@ pandas==2.2.3
 rapidfuzz==3.14.5
 regex==2026.1.15
 scikit-learn==1.5.2
+scipy==1.14.1
 sparse-dot-topn==1.2.0
